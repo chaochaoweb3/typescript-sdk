@@ -44,14 +44,11 @@ client:
     # SEP-2352 (authorization server migration): client does not re-register when
     # PRM authorization_servers changes.
     - auth/authorization-server-migration
-    # SEP-837 (application_type during DCR): the check only fires on draft-version
-    # runs; this draft scenario is the one place the client still hits it.
-    - auth/offline-access-not-supported
-
     # --- Pre-existing scenarios that fail on checks added after conformance 0.1.15 ---
     # SEP-2350 (scope step-up): WARNING-only — client does not compute the union of
     # previously requested and newly challenged scopes on re-authorization; the
     # expected-failures evaluator counts WARNINGs as failures.
+    # (The SEP-837 application_type checks in this scenario pass.)
     - auth/scope-step-up
     # SEP-990 (enterprise-managed authorization extension): no fixture handler /
     # client support for the token-exchange + JWT bearer flow.
