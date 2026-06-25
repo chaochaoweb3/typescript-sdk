@@ -677,20 +677,28 @@ async function authInternal(
     } else {
         // Full discovery via RFC 9728
         const serverInfo = await discoverOAuthServerInfo(serverUrl, { resourceMetadataUrl: effectiveResourceMetadataUrl, fetchFn });
-        authorizationServerUrl = serverInfo.authorizationServerUrl;
-        metadata = serverInfo.authorizationServerMetadata;
-        resourceMetadata = serverInfo.resourceMetadata;
+        const challengedDiscoveryWasUnvalidated = shouldRefreshCachedDiscovery && serverInfo.resourceMetadata === undefined;
 
-        // Persist discovery state for future use
-        // TODO: resourceMetadataUrl is only populated when explicitly provided via options
-        // or loaded from cached state. The URL derived internally by
-        // discoverOAuthProtectedResourceMetadata() is not captured back here.
-        await provider.saveDiscoveryState?.({
-            authorizationServerUrl: String(authorizationServerUrl),
-            resourceMetadataUrl: effectiveResourceMetadataUrl?.toString(),
-            resourceMetadata,
-            authorizationServerMetadata: metadata
-        });
+        if (challengedDiscoveryWasUnvalidated && cachedState?.authorizationServerUrl) {
+            authorizationServerUrl = cachedState.authorizationServerUrl;
+            resourceMetadata = cachedState.resourceMetadata;
+            metadata = cachedState.authorizationServerMetadata;
+        } else {
+            authorizationServerUrl = serverInfo.authorizationServerUrl;
+            metadata = serverInfo.authorizationServerMetadata;
+            resourceMetadata = serverInfo.resourceMetadata;
+
+            // Persist discovery state for future use
+            // TODO: resourceMetadataUrl is only populated when explicitly provided via options
+            // or loaded from cached state. The URL derived internally by
+            // discoverOAuthProtectedResourceMetadata() is not captured back here.
+            await provider.saveDiscoveryState?.({
+                authorizationServerUrl: String(authorizationServerUrl),
+                resourceMetadataUrl: effectiveResourceMetadataUrl?.toString(),
+                resourceMetadata,
+                authorizationServerMetadata: metadata
+            });
+        }
     }
 
     // SEP-2352: Authorization server binding. Client credentials are bound to the
