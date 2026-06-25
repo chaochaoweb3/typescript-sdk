@@ -699,10 +699,10 @@ async function authInternal(
     // credentials and tokens MUST NOT be reused and the client MUST re-register.
     //
     // Canonical comparison key: the validated authorization server metadata `issuer`
-    // (the identifier SEP-2352 specifies), falling back to the authorization server URL
-    // when metadata is unavailable. Under RFC 8414 the issuer and the URL used for
-    // discovery coincide, so a match on either is treated as the same authorization
-    // server to avoid false-positive invalidation.
+    // (the identifier SEP-2352 specifies). The authorization server URL is only an
+    // additional alias when metadata was successfully discovered: if PRM discovery
+    // falls back to the resource server origin after a transient failure, treating
+    // that fallback as authoritative would destructively invalidate valid credentials.
     const previousAuthServerIdentities = [
         cachedState?.authorizationServerMetadata?.issuer,
         cachedState?.authorizationServerUrl,
@@ -710,20 +710,24 @@ async function authInternal(
     ]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .map(value => normalizeAuthorizationServerIdentity(value));
-    const currentAuthServerIdentities = [metadata?.issuer, String(authorizationServerUrl)]
+    const currentIssuer = metadata?.issuer;
+    const hasValidatedCurrentAuthorizationServer = typeof currentIssuer === 'string' && currentIssuer.length > 0;
+    const currentAuthServerIdentities = (hasValidatedCurrentAuthorizationServer ? [currentIssuer, String(authorizationServerUrl)] : [])
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .map(value => normalizeAuthorizationServerIdentity(value));
     const authorizationServerChanged =
+        hasValidatedCurrentAuthorizationServer &&
         previousAuthServerIdentities.length > 0 &&
         !currentAuthServerIdentities.some(identity => previousAuthServerIdentities.includes(identity));
 
     if (authorizationServerChanged) {
+        await provider.invalidateCredentials?.('tokens');
+
         const staleClientInformation = await Promise.resolve(provider.clientInformation());
         // CIMD (URL-based) client IDs are portable across authorization servers
-        // (SEP-991/SEP-2352) — no invalidation or re-registration is needed.
+        // (SEP-991/SEP-2352) — no client invalidation or re-registration is needed.
         if (staleClientInformation && !isHttpsUrl(staleClientInformation.client_id)) {
             await provider.invalidateCredentials?.('client');
-            await provider.invalidateCredentials?.('tokens');
         }
     }
 
