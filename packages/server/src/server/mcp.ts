@@ -29,7 +29,6 @@ import type {
 import {
     assertCompleteRequestPrompt,
     assertCompleteRequestResourceTemplate,
-    isCallToolResult,
     normalizeRawShapeSchema,
     promptArgumentsFromStandardSchema,
     ProtocolError,
@@ -177,7 +176,7 @@ export class McpServer {
                 // Per SEP-2106, a server returning array or primitive structuredContent MUST also emit a
                 // TextContent block with the serialized JSON, so pre-SEP clients that only understand
                 // object-typed structuredContent can fall back to the text content.
-                return isCallToolResult(result) ? withStructuredContentTextFallback(result) : result;
+                return withStructuredContentTextFallback(result);
             } catch (error) {
                 if (error instanceof ProtocolError && error.code === ProtocolErrorCode.UrlElicitationRequired) {
                     throw error; // Return the error to the caller without wrapping in CallToolResult
@@ -1191,10 +1190,11 @@ function withStructuredContentTextFallback(result: CallToolResult): CallToolResu
     if (isPlainObject) {
         return result;
     }
-    if (result.content.some(block => block.type === 'text')) {
+    const content = Array.isArray(result.content) ? result.content : [];
+    if (content.some(block => block.type === 'text')) {
         return result;
     }
-    return { ...result, content: [...result.content, { type: 'text', text: JSON.stringify(structuredContent) }] };
+    return { ...result, content: [...content, { type: 'text', text: JSON.stringify(structuredContent) }] };
 }
 
 /**
