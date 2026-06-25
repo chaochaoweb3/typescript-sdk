@@ -49,10 +49,6 @@ client:
     - auth/offline-access-not-supported
 
     # --- Pre-existing scenarios that fail on checks added after conformance 0.1.15 ---
-    # SEP-2350 (scope step-up): WARNING-only — client does not compute the union of
-    # previously requested and newly challenged scopes on re-authorization; the
-    # expected-failures evaluator counts WARNINGs as failures.
-    - auth/scope-step-up
     # SEP-990 (enterprise-managed authorization extension): no fixture handler /
     # client support for the token-exchange + JWT bearer flow.
     - auth/enterprise-managed-authorization
