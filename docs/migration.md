@@ -159,9 +159,9 @@ Note: `AuthInfo` has moved from `server/auth/types.ts` to the core types and is 
 
 ### Authorization server metadata issuer validation
 
-OAuth client discovery now validates authorization-server metadata issuer values per RFC 8414 Section 3.3. When protected resource metadata identifies an authorization server URL, the discovered metadata's `issuer` must match that URL, except for trailing slash normalization.
-Cached discovery state is also validated; stale legacy no-PRM fallback state that saved the MCP server origin before learning a distinct metadata issuer is ignored and refreshed. The public `discoverAuthorizationServerMetadata()` helper throws when metadata has a mismatched or
-invalid issuer. If your deployment uses host aliases or proxies that serve metadata for a different issuer, publish the canonical issuer URL in protected resource metadata.
+OAuth client discovery now validates authorization-server metadata issuer values per RFC 8414 Section 3.3. When protected resource metadata identifies an authorization server URL, the discovered metadata's `issuer` must match that URL after standard URL parsing/serialization and
+trailing slash normalization. Cached discovery state is also validated; stale legacy no-PRM fallback state that saved the MCP server origin before learning a distinct metadata issuer is ignored and refreshed. The public `discoverAuthorizationServerMetadata()` helper throws when
+metadata has a mismatched or invalid issuer. If your deployment uses host aliases or proxies that serve metadata for a different issuer, publish the canonical issuer URL in protected resource metadata.
 
 For legacy MCP servers without protected resource metadata, the SDK still discovers authorization-server metadata at the MCP server origin. If that origin-hosted metadata names a distinct issuer, the SDK now treats the metadata `issuer` as the authorization server URL saved in
 discovery state and used for fallback endpoint construction.
