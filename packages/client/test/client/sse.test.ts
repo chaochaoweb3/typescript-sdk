@@ -42,15 +42,16 @@ describe('SSEClientTransport', () => {
 
         authServer = createServer((req, res) => {
             if (req.url === '/.well-known/oauth-authorization-server') {
+                const issuer = authBaseUrl.origin;
                 res.writeHead(200, {
                     'Content-Type': 'application/json'
                 });
                 res.end(
                     JSON.stringify({
-                        issuer: 'https://auth.example.com',
-                        authorization_endpoint: 'https://auth.example.com/authorize',
-                        token_endpoint: 'https://auth.example.com/token',
-                        registration_endpoint: 'https://auth.example.com/register',
+                        issuer,
+                        authorization_endpoint: `${issuer}/authorize`,
+                        token_endpoint: `${issuer}/token`,
+                        registration_endpoint: `${issuer}/register`,
                         response_types_supported: ['code'],
                         code_challenge_methods_supported: ['S256']
                     })

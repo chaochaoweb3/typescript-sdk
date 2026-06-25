@@ -901,6 +901,14 @@ describe('OAuth Authorization', () => {
             code_challenge_methods_supported: ['S256']
         };
 
+        const validOpenIdTenantMetadata = {
+            ...validOpenIdMetadata,
+            issuer: 'https://auth.example.com/tenant1',
+            authorization_endpoint: 'https://auth.example.com/tenant1/authorize',
+            token_endpoint: 'https://auth.example.com/tenant1/token',
+            jwks_uri: 'https://auth.example.com/tenant1/jwks'
+        };
+
         it('tries URLs in order and returns first successful metadata', async () => {
             // First OAuth URL (path before well-known) fails with 404
             mockFetch.mockResolvedValueOnce({
@@ -912,12 +920,12 @@ describe('OAuth Authorization', () => {
             mockFetch.mockResolvedValueOnce({
                 ok: true,
                 status: 200,
-                json: async () => validOpenIdMetadata
+                json: async () => validOpenIdTenantMetadata
             });
 
             const metadata = await discoverAuthorizationServerMetadata('https://auth.example.com/tenant1');
 
-            expect(metadata).toEqual(validOpenIdMetadata);
+            expect(metadata).toEqual(validOpenIdTenantMetadata);
 
             // Verify it tried the URLs in the correct order
             const calls = mockFetch.mock.calls;
@@ -938,9 +946,43 @@ describe('OAuth Authorization', () => {
                 json: async () => validOpenIdMetadata
             });
 
-            const metadata = await discoverAuthorizationServerMetadata('https://mcp.example.com');
+            const metadata = await discoverAuthorizationServerMetadata('https://auth.example.com');
 
             expect(metadata).toEqual(validOpenIdMetadata);
+        });
+
+        it('rejects OAuth metadata whose issuer does not match the authorization server URL', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    ...validOAuthMetadata,
+                    issuer: 'https://attacker.example.com'
+                })
+            });
+
+            await expect(discoverAuthorizationServerMetadata('https://auth.example.com')).rejects.toThrow(
+                /Authorization server metadata issuer does not match the expected issuer/
+            );
+        });
+
+        it('rejects OpenID metadata whose issuer does not match the authorization server URL', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 404
+            });
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    ...validOpenIdMetadata,
+                    issuer: 'https://attacker.example.com'
+                })
+            });
+
+            await expect(discoverAuthorizationServerMetadata('https://auth.example.com')).rejects.toThrow(
+                /Authorization server metadata issuer does not match the expected issuer/
+            );
         });
 
         it('continues on 502 and tries next URL', async () => {
@@ -2296,10 +2338,10 @@ describe('OAuth Authorization', () => {
                         ok: true,
                         status: 200,
                         json: async () => ({
-                            issuer: 'https://auth.example.com',
-                            authorization_endpoint: 'https://auth.example.com/authorize',
-                            token_endpoint: 'https://auth.example.com/token',
-                            registration_endpoint: 'https://auth.example.com/register',
+                            issuer: 'https://resource.example.com',
+                            authorization_endpoint: 'https://resource.example.com/authorize',
+                            token_endpoint: 'https://resource.example.com/token',
+                            registration_endpoint: 'https://resource.example.com/register',
                             response_types_supported: ['code'],
                             code_challenge_methods_supported: ['S256']
                         })
@@ -2749,9 +2791,9 @@ describe('OAuth Authorization', () => {
                         ok: true,
                         status: 200,
                         json: async () => ({
-                            issuer: 'https://auth.example.com',
-                            authorization_endpoint: 'https://auth.example.com/authorize',
-                            token_endpoint: 'https://auth.example.com/token',
+                            issuer: 'https://api.example.com',
+                            authorization_endpoint: 'https://api.example.com/authorize',
+                            token_endpoint: 'https://api.example.com/token',
                             response_types_supported: ['code'],
                             code_challenge_methods_supported: ['S256']
                         })
@@ -2805,9 +2847,9 @@ describe('OAuth Authorization', () => {
                         ok: true,
                         status: 200,
                         json: async () => ({
-                            issuer: 'https://auth.example.com',
-                            authorization_endpoint: 'https://auth.example.com/authorize',
-                            token_endpoint: 'https://auth.example.com/token',
+                            issuer: 'https://api.example.com',
+                            authorization_endpoint: 'https://api.example.com/authorize',
+                            token_endpoint: 'https://api.example.com/token',
                             response_types_supported: ['code'],
                             code_challenge_methods_supported: ['S256']
                         })
@@ -2869,9 +2911,9 @@ describe('OAuth Authorization', () => {
                         ok: true,
                         status: 200,
                         json: async () => ({
-                            issuer: 'https://auth.example.com',
-                            authorization_endpoint: 'https://auth.example.com/authorize',
-                            token_endpoint: 'https://auth.example.com/token',
+                            issuer: 'https://api.example.com',
+                            authorization_endpoint: 'https://api.example.com/authorize',
+                            token_endpoint: 'https://api.example.com/token',
                             response_types_supported: ['code'],
                             code_challenge_methods_supported: ['S256']
                         })
@@ -4313,6 +4355,24 @@ describe('SEP-2468: RFC 9207 authorization response iss validation', () => {
                     iss: 'https://attacker.example.com'
                 })
             ).rejects.toThrow(/does not match the expected issuer/);
+
+            expect(tokenEndpointCalls()).toHaveLength(0);
+            expect(provider.saveTokens).not.toHaveBeenCalled();
+        });
+
+        it('rejects cached AS metadata with a mismatched issuer before code exchange', async () => {
+            const provider = createMockProvider({
+                ...authServerMetadata,
+                issuer: 'https://attacker.example.com'
+            });
+
+            await expect(
+                auth(provider, {
+                    serverUrl: 'https://resource.example.com',
+                    authorizationCode: 'code123',
+                    iss: 'https://attacker.example.com'
+                })
+            ).rejects.toThrow(/Authorization server metadata issuer does not match the expected issuer/);
 
             expect(tokenEndpointCalls()).toHaveLength(0);
             expect(provider.saveTokens).not.toHaveBeenCalled();

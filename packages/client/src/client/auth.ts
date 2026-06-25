@@ -596,6 +596,27 @@ export function validateAuthorizationResponseIssuer(
     }
 }
 
+function normalizeDiscoveredIssuerIdentifier(issuer: string | URL): string {
+    const normalized = new URL(issuer).toString();
+
+    return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+}
+
+function validateAuthorizationServerMetadataIssuer(metadata: { issuer: string } | undefined, authorizationServerUrl: string | URL): void {
+    if (!metadata) {
+        return;
+    }
+
+    const expectedIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerUrl);
+    const actualIssuer = normalizeDiscoveredIssuerIdentifier(metadata.issuer);
+
+    if (actualIssuer !== expectedIssuer) {
+        throw new Error(
+            `Authorization server metadata issuer does not match the expected issuer: expected ${expectedIssuer}, got ${metadata.issuer} (RFC 8414 Section 3.3)`
+        );
+    }
+}
+
 /**
  * Orchestrates the full auth flow with a server.
  *
@@ -715,6 +736,7 @@ async function authInternal(
         resourceMetadata = cachedState.resourceMetadata;
         metadata =
             cachedState.authorizationServerMetadata ?? (await discoverAuthorizationServerMetadata(authorizationServerUrl, { fetchFn }));
+        validateAuthorizationServerMetadataIssuer(metadata, authorizationServerUrl);
 
         // If resource metadata wasn't cached, try to fetch it for selectResourceURL
         if (!resourceMetadata) {
@@ -748,6 +770,7 @@ async function authInternal(
         const serverInfo = await discoverOAuthServerInfo(serverUrl, { resourceMetadataUrl: effectiveResourceMetadataUrl, fetchFn });
         authorizationServerUrl = serverInfo.authorizationServerUrl;
         metadata = serverInfo.authorizationServerMetadata;
+        validateAuthorizationServerMetadataIssuer(metadata, authorizationServerUrl);
         resourceMetadata = serverInfo.resourceMetadata;
 
         // Persist discovery state for future use
@@ -1351,9 +1374,14 @@ export async function discoverAuthorizationServerMetadata(
         }
 
         // Parse and validate based on type
-        return type === 'oauth'
-            ? OAuthMetadataSchema.parse(await response.json())
-            : OpenIdProviderDiscoveryMetadataSchema.parse(await response.json());
+        const metadata =
+            type === 'oauth'
+                ? OAuthMetadataSchema.parse(await response.json())
+                : OpenIdProviderDiscoveryMetadataSchema.parse(await response.json());
+
+        validateAuthorizationServerMetadataIssuer(metadata, authorizationServerUrl);
+
+        return metadata;
     }
 
     return undefined;
