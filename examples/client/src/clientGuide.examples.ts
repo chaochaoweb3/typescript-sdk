@@ -212,8 +212,12 @@ async function callTool_structuredOutput(client: Client) {
     });
 
     // Machine-readable output for the client application
-    if (result.structuredContent) {
-        console.log(result.structuredContent); // e.g. { bmi: 22.86 }
+    const structuredContent = result.structuredContent;
+    if (typeof structuredContent === 'object' && structuredContent !== null && !Array.isArray(structuredContent)) {
+        const bmi = (structuredContent as Record<string, unknown>).bmi;
+        if (typeof bmi === 'number') {
+            console.log(bmi); // e.g. 22.86
+        }
     }
     //#endregion callTool_structuredOutput
 }

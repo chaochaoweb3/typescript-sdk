@@ -563,19 +563,18 @@ Tool schemas conform to full JSON Schema 2020-12, and `structuredContent` may be
 | `inputSchema` root | `type: "object"` + `properties`/`required` only | `type: "object"` required, **plus** any 2020-12 keyword (`oneOf`/`anyOf`/`allOf`/`not`, `if`/`then`/`else`, `$ref`/`$defs`/`$anchor`) |
 | `outputSchema` root | `type: "object"` only | **any** valid JSON Schema 2020-12 (object, array, primitive, composition) |
 | `CallToolResult.structuredContent` type | `{ [key: string]: unknown }` | `unknown` (**source-breaking**) |
-| `client.callTool(...)` | returns `structuredContent` as object | generic `client.callTool<T>(...)`; `structuredContent` typed as `T` (defaults to `JSONValue`) |
+| `client.callTool(...)` | returns `structuredContent` as object | returns `structuredContent` as `unknown`; narrow it before property access |
 | `registerTool` handler return | `structuredContent` untyped | type-checked against the tool's `outputSchema` inferred output |
 
 Source-breaking fix — property access on `structuredContent` needs a type or a guard:
 
 ```typescript
 // Before: result.structuredContent?.temperature  (compiled, but unsound for non-object output)
-// After, recommended:
-const result = await client.callTool<{ temperature: number }>({ name: 'get_weather', arguments: { city: 'SF' } });
-const temp = result.structuredContent?.temperature; // typed
-// After, manual narrowing:
+// After:
+const result = await client.callTool({ name: 'get_weather', arguments: { city: 'SF' } });
 const sc = result.structuredContent;
-const temp = sc && typeof sc === 'object' && !Array.isArray(sc) ? (sc as Record<string, unknown>).temperature : undefined;
+const temp =
+    typeof sc === 'object' && sc !== null && !Array.isArray(sc) ? (sc as Record<string, unknown>).temperature : undefined;
 ```
 
 Behavior notes:
@@ -595,7 +594,7 @@ Behavior notes:
 8. If using server SSE transport, migrate to Streamable HTTP
 9. If using server auth from the SDK: RS helpers (`requireBearerAuth`, `mcpAuthMetadataRouter`, `OAuthTokenVerifier`) → `@modelcontextprotocol/express`; AS helpers → `@modelcontextprotocol/server-legacy/auth` (deprecated); migrate AS to external IdP/OAuth library
 10. If relying on `listTools()`/`listPrompts()`/etc. throwing on missing capabilities, set `enforceStrictCapabilities: true`
-11. If you read properties off `result.structuredContent`, add a type argument to `callTool<T>()` or a narrowing guard — it is now typed `unknown` (section 15)
+11. If you read properties off `result.structuredContent`, add a narrowing guard — it is now typed `unknown` (section 15)
 12. Format the changed files with the project's formatter (`prettier --write`, `eslint --fix`, or `biome format --write`) — edits are not reformatted automatically, and the wrapped schemas (step 5) and rewritten `setRequestHandler` method strings (section 9) frequently need it to
     satisfy lint
 13. Verify: build with `tsc` / run tests

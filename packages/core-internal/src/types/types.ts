@@ -336,9 +336,8 @@ export type CallToolResult = Infer<typeof CallToolResultSchema>;
  *
  * Per SEP-2106 `structuredContent` may be any JSON value (object, array, string, number,
  * boolean, or null), so the wire-level type is intentionally wide. This helper produces a
- * precise view of a result — used by {@link CallToolResult}-returning APIs such as
- * `client.callTool<T>()` and by tool handlers whose `outputSchema` is known — so consumers
- * get a typed `structuredContent` instead of writing narrowing guards by hand.
+ * precise view of a result for APIs whose output shape is known ahead of time, such as
+ * tool handlers typed from a registered `outputSchema`.
  *
  * @typeParam StructuredContent - the expected type of `structuredContent` (defaults to any JSON value).
  */

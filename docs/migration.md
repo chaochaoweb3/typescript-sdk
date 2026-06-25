@@ -1027,15 +1027,11 @@ Per [SEP-2106](https://github.com/modelcontextprotocol/modelcontextprotocol/blob
 // Before (v1): compiled, but was a lie for non-object output
 const temp = result.structuredContent?.temperature;
 
-// After (v2), option A — narrow yourself:
+// After (v2): narrow before property access
 const sc = result.structuredContent;
-if (sc && typeof sc === 'object' && !Array.isArray(sc)) {
+if (typeof sc === 'object' && sc !== null && !Array.isArray(sc)) {
     const temp = (sc as Record<string, unknown>).temperature;
 }
-
-// After (v2), option B — pass the expected shape to callTool (recommended):
-const result = await client.callTool<{ temperature: number }>({ name: 'get_weather', arguments: { city: 'SF' } });
-const temp = result.structuredContent?.temperature; // typed as number
 ```
 
 **Stronger server-side typing.** When a tool declares an `outputSchema`, `registerTool` now type-checks the handler's returned `structuredContent` against the schema's inferred output type at compile time — a mismatch is a type error rather than a runtime-only failure.
