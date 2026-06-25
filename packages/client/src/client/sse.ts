@@ -11,7 +11,7 @@ import type { ErrorEvent, EventSourceInit } from 'eventsource';
 import { EventSource } from 'eventsource';
 
 import type { AuthProvider, OAuthClientProvider } from './auth';
-import { adaptOAuthProvider, auth, extractWWWAuthenticateParams, isOAuthClientProvider, UnauthorizedError } from './auth';
+import { adaptOAuthProvider, auth, extractWWWAuthenticateParams, isOAuthClientProvider, UnauthorizedError, unionScopes } from './auth';
 
 export class SseError extends Error {
     constructor(
@@ -143,7 +143,7 @@ export class SSEClientTransport implements Transport {
                         if (response.headers.has('www-authenticate')) {
                             const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
                             this._resourceMetadataUrl = resourceMetadataUrl;
-                            this._scope = scope;
+                            this._scope = unionScopes(this._scope, scope);
                         }
                     }
 
@@ -158,15 +158,23 @@ export class SSEClientTransport implements Transport {
                         const response = this._last401Response;
                         this._last401Response = undefined;
                         this._eventSource?.close();
-                        this._authProvider.onUnauthorized({ response, serverUrl: this._url, fetchFn: this._fetchWithInit }).then(
-                            // onUnauthorized succeeded → retry fresh. Its onerror handles its own onerror?.() + reject.
-                            () => this._startOrAuth().then(resolve, reject),
-                            // onUnauthorized failed → not yet reported.
-                            error => {
-                                this.onerror?.(error);
-                                reject(error);
-                            }
-                        );
+                        this._authProvider
+                            .onUnauthorized({
+                                response,
+                                serverUrl: this._url,
+                                fetchFn: this._fetchWithInit,
+                                resourceMetadataUrl: this._resourceMetadataUrl,
+                                scope: this._scope
+                            })
+                            .then(
+                                // onUnauthorized succeeded → retry fresh. Its onerror handles its own onerror?.() + reject.
+                                () => this._startOrAuth().then(resolve, reject),
+                                // onUnauthorized failed → not yet reported.
+                                error => {
+                                    this.onerror?.(error);
+                                    reject(error);
+                                }
+                            );
                         return;
                     }
                     const error = new UnauthorizedError();
@@ -278,14 +286,16 @@ export class SSEClientTransport implements Transport {
                     if (response.headers.has('www-authenticate')) {
                         const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
                         this._resourceMetadataUrl = resourceMetadataUrl;
-                        this._scope = scope;
+                        this._scope = unionScopes(this._scope, scope);
                     }
 
                     if (this._authProvider.onUnauthorized && !isAuthRetry) {
                         await this._authProvider.onUnauthorized({
                             response,
                             serverUrl: this._url,
-                            fetchFn: this._fetchWithInit
+                            fetchFn: this._fetchWithInit,
+                            resourceMetadataUrl: this._resourceMetadataUrl,
+                            scope: this._scope
                         });
                         await response.text?.().catch(() => {});
                         // Purposely _not_ awaited, so we don't call onerror twice

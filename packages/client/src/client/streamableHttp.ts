@@ -259,14 +259,16 @@ export class StreamableHTTPClientTransport implements Transport {
                     if (response.headers.has('www-authenticate')) {
                         const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
                         this._resourceMetadataUrl = resourceMetadataUrl;
-                        this._scope = scope;
+                        this._scope = unionScopes(this._scope, scope);
                     }
 
                     if (this._authProvider.onUnauthorized && !isAuthRetry) {
                         await this._authProvider.onUnauthorized({
                             response,
                             serverUrl: this._url,
-                            fetchFn: this._fetchWithInit
+                            fetchFn: this._fetchWithInit,
+                            resourceMetadataUrl: this._resourceMetadataUrl,
+                            scope: this._scope
                         });
                         await response.text?.().catch(() => {});
                         // Purposely _not_ awaited, so we don't call onerror twice
@@ -568,14 +570,16 @@ export class StreamableHTTPClientTransport implements Transport {
                     if (response.headers.has('www-authenticate')) {
                         const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
                         this._resourceMetadataUrl = resourceMetadataUrl;
-                        this._scope = scope;
+                        this._scope = unionScopes(this._scope, scope);
                     }
 
                     if (this._authProvider.onUnauthorized && !isAuthRetry) {
                         await this._authProvider.onUnauthorized({
                             response,
                             serverUrl: this._url,
-                            fetchFn: this._fetchWithInit
+                            fetchFn: this._fetchWithInit,
+                            resourceMetadataUrl: this._resourceMetadataUrl,
+                            scope: this._scope
                         });
                         await response.text?.().catch(() => {});
                         // Purposely _not_ awaited, so we don't call onerror twice
@@ -612,10 +616,20 @@ export class StreamableHTTPClientTransport implements Transport {
                             // SEP-2350: scope accumulation is a client-side responsibility. When
                             // re-authorizing after a scope challenge, request the union of
                             // previously granted scopes (from the stored tokens), previously
-                            // requested scopes, and the newly challenged scopes, so per-operation
-                            // challenges don't drop previously granted permissions.
+                            // requested scopes, the protected resource's default scope, the
+                            // provider's configured default scope, and the newly challenged
+                            // scopes, so per-operation challenges don't drop previously granted
+                            // permissions when the token response omits `scope`.
                             const grantedTokens = await this._oauthProvider.tokens();
-                            this._scope = unionScopes(grantedTokens?.scope, this._scope, scope);
+                            const discoveryState = await this._oauthProvider.discoveryState?.();
+                            const resourceScope = discoveryState?.resourceMetadata?.scopes_supported?.join(' ');
+                            this._scope = unionScopes(
+                                grantedTokens?.scope,
+                                this._scope,
+                                resourceScope,
+                                this._oauthProvider.clientMetadata.scope,
+                                scope
+                            );
                         }
 
                         if (resourceMetadataUrl) {
