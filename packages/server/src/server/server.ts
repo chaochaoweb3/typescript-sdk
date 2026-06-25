@@ -6,6 +6,8 @@ import type {
     CreateMessageRequestParamsWithTools,
     CreateMessageResult,
     CreateMessageResultWithTools,
+    ElicitInputFormParams,
+    ElicitInputResult,
     ElicitRequestFormParams,
     ElicitRequestURLParams,
     ElicitResult,
@@ -28,6 +30,7 @@ import type {
     Result,
     ServerCapabilities,
     ServerContext,
+    StandardSchemaWithJSON,
     ToolResultContent,
     ToolUseContent
 } from '@modelcontextprotocol/core-internal';
@@ -47,7 +50,8 @@ import {
     ProtocolError,
     ProtocolErrorCode,
     SdkError,
-    SdkErrorCode
+    SdkErrorCode,
+    standardSchemaToJsonSchema
 } from '@modelcontextprotocol/core-internal';
 import { DefaultJsonSchemaValidator } from '@modelcontextprotocol/server/_shims';
 
@@ -151,7 +155,7 @@ export class Server extends Protocol<ServerContext> {
                 // `requestSampling` remain functional during the deprecation window
                 // (at least twelve months). See ServerContext for migration guidance.
                 log: (level, data, logger) => this.sendLoggingMessage({ level, data, logger }),
-                elicitInput: (params, options) => this.elicitInput(params, options),
+                elicitInput: this.elicitInput.bind(this) as ServerContext['mcpReq']['elicitInput'],
                 requestSampling: (params, options) => this.createMessage(params, options)
             },
             http: hasHttpInfo
@@ -525,7 +529,15 @@ export class Server extends Protocol<ServerContext> {
      * @param options Optional request options.
      * @returns The result of the elicitation request.
      */
-    async elicitInput(params: ElicitRequestFormParams | ElicitRequestURLParams, options?: RequestOptions): Promise<ElicitResult> {
+    async elicitInput<Schema extends StandardSchemaWithJSON>(
+        params: ElicitInputFormParams<Schema>,
+        options?: RequestOptions
+    ): Promise<ElicitInputResult<Schema>>;
+    async elicitInput(params: ElicitRequestFormParams | ElicitRequestURLParams, options?: RequestOptions): Promise<ElicitResult>;
+    async elicitInput(
+        params: ElicitRequestFormParams | ElicitRequestURLParams | ElicitInputFormParams<StandardSchemaWithJSON>,
+        options?: RequestOptions
+    ): Promise<ElicitResult> {
         const mode = (params.mode ?? 'form') as 'form' | 'url';
 
         switch (mode) {
@@ -542,8 +554,9 @@ export class Server extends Protocol<ServerContext> {
                     throw new SdkError(SdkErrorCode.CapabilityNotSupported, 'Client does not support form elicitation.');
                 }
 
-                const formParams: ElicitRequestFormParams =
-                    params.mode === 'form' ? (params as ElicitRequestFormParams) : { ...(params as ElicitRequestFormParams), mode: 'form' };
+                const formParams = this.normalizeElicitInputFormParams(
+                    params as ElicitRequestFormParams | ElicitInputFormParams<StandardSchemaWithJSON>
+                );
 
                 const result = await this._requestWithSchema(
                     { method: 'elicitation/create', params: formParams },
@@ -575,6 +588,33 @@ export class Server extends Protocol<ServerContext> {
                 return result;
             }
         }
+    }
+
+    private normalizeElicitInputFormParams(
+        params: ElicitRequestFormParams | ElicitInputFormParams<StandardSchemaWithJSON>
+    ): ElicitRequestFormParams {
+        const formParams =
+            params.mode === 'form'
+                ? (params as ElicitRequestFormParams)
+                : { ...(params as ElicitRequestFormParams), mode: 'form' as const };
+
+        if (this.isElicitInputSchema(formParams.requestedSchema)) {
+            return {
+                ...formParams,
+                requestedSchema: standardSchemaToJsonSchema(
+                    formParams.requestedSchema,
+                    'input'
+                ) as ElicitRequestFormParams['requestedSchema']
+            };
+        }
+
+        return formParams;
+    }
+
+    private isElicitInputSchema(
+        schema: ElicitRequestFormParams['requestedSchema'] | StandardSchemaWithJSON
+    ): schema is StandardSchemaWithJSON {
+        return typeof schema === 'object' && schema !== null && '~standard' in schema;
     }
 
     /**
