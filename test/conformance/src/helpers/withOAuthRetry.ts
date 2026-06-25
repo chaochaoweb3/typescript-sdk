@@ -1,5 +1,5 @@
 import type { FetchLike, Middleware } from '@modelcontextprotocol/client';
-import { auth, extractWWWAuthenticateParams, UnauthorizedError } from '@modelcontextprotocol/client';
+import { auth, extractWWWAuthenticateParams, UnauthorizedError, unionScopes } from '@modelcontextprotocol/client';
 
 import { ConformanceOAuthProvider } from './conformanceOAuthProvider';
 
@@ -9,7 +9,9 @@ export const handle401 = async (
     next: FetchLike,
     serverUrl: string | URL
 ): Promise<void> => {
-    const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
+    const tokens = await provider.tokens();
+    const { resourceMetadataUrl, scope: challengedScope } = extractWWWAuthenticateParams(response);
+    const scope = unionScopes(tokens?.scope, challengedScope);
     let result = await auth(provider, {
         serverUrl,
         resourceMetadataUrl,
