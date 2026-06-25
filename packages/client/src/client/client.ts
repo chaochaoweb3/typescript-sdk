@@ -870,11 +870,16 @@ export class Client extends Protocol<ClientContext> {
      * Cache validators for tool output schemas.
      * Called after {@linkcode listTools | listTools()} to pre-compile validators for better performance.
      */
-    private cacheToolMetadata(tools: Tool[]): void {
-        this._cachedToolOutputValidators.clear();
-        this._toolOutputValidatorErrors.clear();
+    private cacheToolMetadata(tools: Tool[], reset: boolean): void {
+        if (reset) {
+            this._cachedToolOutputValidators.clear();
+            this._toolOutputValidatorErrors.clear();
+        }
 
         for (const tool of tools) {
+            this._cachedToolOutputValidators.delete(tool.name);
+            this._toolOutputValidatorErrors.delete(tool.name);
+
             // If the tool has an outputSchema, create and cache the validator. Compilation can throw
             // (invalid schema, or a SEP-2106 safety-guard rejection); scope that failure to the
             // offending tool rather than letting it reject the whole listTools() call.
@@ -926,8 +931,9 @@ export class Client extends Protocol<ClientContext> {
         }
         const result = await this._requestWithSchema({ method: 'tools/list', params }, ListToolsResultSchema, options);
 
-        // Cache the tools and their output schemas for future validation
-        this.cacheToolMetadata(result.tools);
+        // Cache the tools and their output schemas for future validation. Preserve entries across
+        // pagination so validators discovered on earlier pages remain active after the final page.
+        this.cacheToolMetadata(result.tools, params?.cursor === undefined);
 
         return result;
     }

@@ -563,7 +563,7 @@ Tool schemas conform to full JSON Schema 2020-12, and `structuredContent` may be
 | ---------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `inputSchema` root                             | `type: "object"` + `properties`/`required` only          | `type: "object"` required, **plus** any 2020-12 keyword (`oneOf`/`anyOf`/`allOf`/`not`, `if`/`then`/`else`, `$ref`/`$defs`/`$anchor`) |
 | `outputSchema` root                            | `type: "object"` only                                    | **any** valid JSON Schema 2020-12 (object, array, primitive, composition)                                                             |
-| `Tool.inputSchema` / `Tool.outputSchema` types | object schema with typed `properties`/`required` members | broad JSON Schema records; narrow before reading keyword properties (**source-breaking**)                                             |
+| `Tool.inputSchema` / `Tool.outputSchema` types | object schema with typed `properties`/`required` members | broad JSON Schema records; narrow keyword field values before using them (**source-breaking**)                                        |
 | `CallToolResult.structuredContent` type        | `{ [key: string]: unknown }`                             | `unknown` (**source-breaking**)                                                                                                       |
 | `client.callTool(...)`                         | returns `structuredContent` as object                    | returns `structuredContent` as `unknown`; narrow it before property access                                                            |
 | `registerTool` handler return                  | `structuredContent` untyped                              | type-checked against the tool's `outputSchema` inferred output                                                                        |
@@ -578,20 +578,21 @@ const sc = result.structuredContent;
 const temp = typeof sc === 'object' && sc !== null && !Array.isArray(sc) ? (sc as Record<string, unknown>).temperature : undefined;
 ```
 
-Source-breaking fix — property access on `Tool.inputSchema` / `Tool.outputSchema` keyword fields also needs narrowing:
+Source-breaking fix — property access on `Tool.inputSchema` / `Tool.outputSchema` keyword field values also needs narrowing:
 
 ```typescript
-const schema = tool.inputSchema;
-const properties =
-    typeof schema === 'object' && schema !== null && !Array.isArray(schema)
-        ? (schema as Record<string, unknown>).properties
-        : undefined;
+const required = Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : [];
+const properties = tool.inputSchema.properties;
+if (typeof properties === 'object' && properties !== null && !Array.isArray(properties)) {
+    const propertyNames = Object.keys(properties);
+}
 ```
 
 Behavior notes:
 
 - A server returning array/primitive `structuredContent` automatically also emits a serialized `TextContent` block (old-client interop). No action required.
-- Built-in validators reject non-same-document `$ref`/`$dynamicRef` (SSRF) and over-budget schemas (composition DoS). Use a custom `jsonSchemaValidator` to change this.
+- Built-in validators reject non-same-document `$ref`/`$dynamicRef` (SSRF) and over-budget schemas (composition DoS). Use `resolveExternalSchemaRefs(schema, { allowlist })` to fetch and inline approved external refs before validation, or use a custom `jsonSchemaValidator` to
+  change validator behavior.
 
 ## 16. Migration Steps (apply in this order)
 

@@ -1033,22 +1033,23 @@ if (typeof sc === 'object' && sc !== null && !Array.isArray(sc)) {
 }
 ```
 
-The generated `Tool.inputSchema` and `Tool.outputSchema` types also widened to reflect full JSON Schema 2020-12. `Tool.inputSchema.properties`, `Tool.inputSchema.required`, and analogous `outputSchema` fields are no longer statically present. Narrow the schema to an object record
-before reading keyword properties:
+The generated `Tool.inputSchema` and `Tool.outputSchema` types also widened to reflect full JSON Schema 2020-12. Keyword fields such as `properties`, `required`, and analogous `outputSchema` fields now have broad JSON values. Narrow the keyword field value before using it:
 
 ```typescript
-const schema = tool.inputSchema;
-const properties =
-    typeof schema === 'object' && schema !== null && !Array.isArray(schema)
-        ? (schema as Record<string, unknown>).properties
-        : undefined;
+const required = Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : [];
+const properties = tool.inputSchema.properties;
+if (typeof properties === 'object' && properties !== null && !Array.isArray(properties)) {
+    const propertyNames = Object.keys(properties);
+}
 ```
 
 **Stronger server-side typing.** When a tool declares an `outputSchema`, `registerTool` now type-checks the handler's returned `structuredContent` against the schema's inferred output type at compile time — a mismatch is a type error rather than a runtime-only failure.
 
-**Old-client interoperability.** A server that returns array or primitive `structuredContent` will automatically also emit a `TextContent` block containing the serialized JSON, so pre-SEP clients that only understand object-typed `structuredContent` can fall back to the text content. Object `structuredContent` (and results that already include a text block) are left unchanged.
+**Old-client interoperability.** A server that returns array or primitive `structuredContent` will automatically also emit a `TextContent` block containing the serialized JSON, so pre-SEP clients that only understand object-typed `structuredContent` can fall back to the text
+content. Object `structuredContent` (and results that already include a text block) are left unchanged.
 
-**Security.** The built-in validators never dereference non-same-document `$ref`/`$dynamicRef` (anything not beginning with `#`) — such schemas are rejected rather than fetched, preventing SSRF. Schemas exceeding a generous depth / subschema-count bound are also rejected to prevent composition-based validation DoS. Supply your own `jsonSchemaValidator` implementation if you need different behavior.
+**Security.** The built-in validators never dereference non-same-document `$ref`/`$dynamicRef` (anything not beginning with `#`) — such schemas are rejected rather than fetched, preventing SSRF. If you intentionally need external references, resolve and inline them before
+validation with `resolveExternalSchemaRefs(schema, { allowlist })`. Schemas exceeding a generous depth / subschema-count bound are also rejected to prevent composition-based validation DoS. Supply your own `jsonSchemaValidator` implementation if you need different behavior.
 
 ## Unchanged APIs
 
