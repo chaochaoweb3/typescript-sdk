@@ -7,7 +7,7 @@
  * @module
  */
 
-import { addFormats, Ajv, AjvJsonSchemaValidator } from './ajvProvider';
+import { addFormats, Ajv2020, AjvJsonSchemaValidator } from './ajvProvider';
 
 /**
  * Example: Default AJV instance.
@@ -24,7 +24,7 @@ function AjvJsonSchemaValidator_default() {
  */
 function AjvJsonSchemaValidator_customInstance() {
     //#region AjvJsonSchemaValidator_customInstance
-    const ajv = new Ajv({ strict: true, allErrors: true });
+    const ajv = new Ajv2020({ strict: true, allErrors: true });
     const validator = new AjvJsonSchemaValidator(ajv);
     //#endregion AjvJsonSchemaValidator_customInstance
     return validator;
@@ -33,12 +33,12 @@ function AjvJsonSchemaValidator_customInstance() {
 /**
  * Example: Custom AJV instance with formats registered.
  *
- * `Ajv` and `addFormats` are re-exported from this module so customising the validator
+ * `Ajv2020` and `addFormats` are re-exported from this module so customising the validator
  * requires no extra `package.json` dependencies — both come from the SDK's bundled copy.
  */
 function AjvJsonSchemaValidator_withFormats() {
     //#region AjvJsonSchemaValidator_withFormats
-    const ajv = new Ajv({ strict: true, allErrors: true });
+    const ajv = new Ajv2020({ strict: true, allErrors: true });
     addFormats(ajv);
     const validator = new AjvJsonSchemaValidator(ajv);
     //#endregion AjvJsonSchemaValidator_withFormats

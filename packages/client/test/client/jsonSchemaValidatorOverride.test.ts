@@ -1,5 +1,5 @@
 import type { JSONRPCMessage, JsonSchemaType, JsonSchemaValidatorResult, jsonSchemaValidator } from '@modelcontextprotocol/core-internal';
-import { InMemoryTransport, LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/core-internal';
+import { InMemoryTransport, LATEST_PROTOCOL_VERSION, ProtocolErrorCode } from '@modelcontextprotocol/core-internal';
 import { Client } from '../../src/client/client';
 import { fromJsonSchema } from '../../src/fromJsonSchema';
 
@@ -16,7 +16,13 @@ class RecordingValidator implements jsonSchemaValidator {
     }
 }
 
-async function connectInitializedClient(client: Client) {
+class ThrowingValidator implements jsonSchemaValidator {
+    getValidator<T>(_schema: JsonSchemaType): (value: unknown) => JsonSchemaValidatorResult<T> {
+        throw new Error('schema compile blocked');
+    }
+}
+
+async function connectInitializedClient(client: Client, handlers?: { onToolsCall?: (message: JSONRPCMessage) => void }) {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     serverTransport.onmessage = async message => {
         if ('method' in message && 'id' in message && message.method === 'initialize') {
@@ -46,6 +52,16 @@ async function connectInitializedClient(client: Client) {
                             }
                         }
                     ]
+                }
+            } satisfies JSONRPCMessage);
+        } else if ('method' in message && 'id' in message && message.method === 'tools/call') {
+            handlers?.onToolsCall?.(message);
+            await serverTransport.send({
+                jsonrpc: '2.0',
+                id: message.id,
+                result: {
+                    structuredContent: { count: 1 },
+                    content: [{ type: 'text', text: 'ok' }]
                 }
             } satisfies JSONRPCMessage);
         }
@@ -87,6 +103,37 @@ describe('client JSON Schema validator overrides', () => {
                 required: ['count']
             }
         ]);
+
+        await client.close();
+        await clientTransport.close();
+        await serverTransport.close();
+    });
+
+    test('callTool rejects cached output schema compile errors before sending tools/call', async () => {
+        const validator = new ThrowingValidator();
+        const client = new Client(
+            { name: 'test-client', version: '1.0.0' },
+            {
+                capabilities: {},
+                jsonSchemaValidator: validator
+            }
+        );
+        let sawToolCall = false;
+        const { clientTransport, serverTransport } = await connectInitializedClient(client, {
+            onToolsCall: () => {
+                sawToolCall = true;
+            }
+        });
+
+        await expect(client.listTools()).resolves.toMatchObject({
+            tools: [{ name: 'structured-tool' }]
+        });
+
+        await expect(client.callTool({ name: 'structured-tool', arguments: {} })).rejects.toMatchObject({
+            code: ProtocolErrorCode.InvalidParams,
+            message: expect.stringContaining('output schema that could not be compiled')
+        });
+        expect(sawToolCall).toBe(false);
 
         await client.close();
         await clientTransport.close();

@@ -978,11 +978,9 @@ You do not need to install or import validator packages for the default behavior
 If you want to customize the **built-in** backend (for example, pre-register schemas by `$id`, register custom AJV formats, or change the `@cfworker/json-schema` draft), import the named class from the explicit subpath and pass an instance through `jsonSchemaValidator`:
 
 ```typescript
-import { Ajv } from 'ajv';
-import addFormats from 'ajv-formats';
-import { AjvJsonSchemaValidator } from '@modelcontextprotocol/server/validators/ajv';
+import { Ajv2020, addFormats, AjvJsonSchemaValidator } from '@modelcontextprotocol/server/validators/ajv';
 
-const ajv = new Ajv({ strict: true, allErrors: true });
+const ajv = new Ajv2020({ strict: true, allErrors: true });
 addFormats(ajv);
 
 const server = new McpServer(
@@ -1009,7 +1007,7 @@ const server = new McpServer(
 (both subpaths are also available on `@modelcontextprotocol/client/validators/...`)
 
 If you import from one of these subpaths in your own code, the corresponding peer dep (`ajv` + `ajv-formats`, or `@cfworker/json-schema`) needs to be installed in your `package.json`. The runtime shim continues to vendor a copy for the default code path, so you can use the
-subpath in some files and rely on the default in others.
+subpath in some files and rely on the default in others. For AJV customization, use the re-exported `Ajv2020` class; a plain `Ajv` instance uses draft-07 semantics and will not validate JSON Schema 2020-12 keywords such as `prefixItems` the same way as MCP's default validator.
 
 To replace validation wholesale rather than customizing the built-in classes, implement the `jsonSchemaValidator` interface and pass your own implementation through the option above.
 
@@ -1017,7 +1015,8 @@ To replace validation wholesale rather than customizing the built-in classes, im
 
 Per [SEP-2106](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2106-json-schema-2020-12.md), tool schemas are no longer restricted to the `type`/`properties`/`required` subset, and a tool's structured output may be any JSON value:
 
-- **`inputSchema`** still requires `type: "object"` at the root (tool arguments are always objects), but may now use any JSON Schema 2020-12 keyword alongside it — composition (`oneOf`/`anyOf`/`allOf`/`not`), conditional (`if`/`then`/`else`), references (`$ref`/`$defs`/`$anchor`), etc.
+- **`inputSchema`** still requires `type: "object"` at the root (tool arguments are always objects), but may now use any JSON Schema 2020-12 keyword alongside it — composition (`oneOf`/`anyOf`/`allOf`/`not`), conditional (`if`/`then`/`else`), references
+  (`$ref`/`$defs`/`$anchor`), etc.
 - **`outputSchema`** may now be **any** valid JSON Schema 2020-12 — objects, arrays, primitives, or compositions. It is no longer restricted to `type: "object"`.
 - **`structuredContent`** may now be any JSON value (object, array, string, number, boolean, or null), not just an object.
 
@@ -1032,6 +1031,17 @@ const sc = result.structuredContent;
 if (typeof sc === 'object' && sc !== null && !Array.isArray(sc)) {
     const temp = (sc as Record<string, unknown>).temperature;
 }
+```
+
+The generated `Tool.inputSchema` and `Tool.outputSchema` types also widened to reflect full JSON Schema 2020-12. `Tool.inputSchema.properties`, `Tool.inputSchema.required`, and analogous `outputSchema` fields are no longer statically present. Narrow the schema to an object record
+before reading keyword properties:
+
+```typescript
+const schema = tool.inputSchema;
+const properties =
+    typeof schema === 'object' && schema !== null && !Array.isArray(schema)
+        ? (schema as Record<string, unknown>).properties
+        : undefined;
 ```
 
 **Stronger server-side typing.** When a tool declares an `outputSchema`, `registerTool` now type-checks the handler's returned `structuredContent` against the schema's inferred output type at compile time — a mismatch is a type error rather than a runtime-only failure.

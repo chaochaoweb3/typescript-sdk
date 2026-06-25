@@ -45,7 +45,7 @@ function createDefaultAjvInstance(): Ajv {
 
 /**
  * AJV-backed JSON Schema validator. See `@modelcontextprotocol/{client,server}/validators/ajv`
- * for the customisation entry point (re-exports `Ajv` and `addFormats` from the bundled copy).
+ * for the customisation entry point (re-exports `Ajv2020`, `Ajv`, and `addFormats` from the bundled copy).
  *
  * @example Use with default configuration
  * ```ts source="./ajvProvider.examples.ts#AjvJsonSchemaValidator_default"
@@ -54,13 +54,13 @@ function createDefaultAjvInstance(): Ajv {
  *
  * @example Use with a custom AJV instance
  * ```ts source="./ajvProvider.examples.ts#AjvJsonSchemaValidator_customInstance"
- * const ajv = new Ajv({ strict: true, allErrors: true });
+ * const ajv = new Ajv2020({ strict: true, allErrors: true });
  * const validator = new AjvJsonSchemaValidator(ajv);
  * ```
  *
  * @example Register ajv-formats
  * ```ts source="./ajvProvider.examples.ts#AjvJsonSchemaValidator_withFormats"
- * const ajv = new Ajv({ strict: true, allErrors: true });
+ * const ajv = new Ajv2020({ strict: true, allErrors: true });
  * addFormats(ajv);
  * const validator = new AjvJsonSchemaValidator(ajv);
  * ```
@@ -106,5 +106,6 @@ export class AjvJsonSchemaValidator implements jsonSchemaValidator {
 }
 
 export { Ajv } from 'ajv';
+export { Ajv2020 } from 'ajv/dist/2020.js';
 /** `ajv-formats` default export, normalised through the CJS/ESM interop wrapper. */
 export const addFormats = _addFormats as unknown as typeof _addFormats.default;

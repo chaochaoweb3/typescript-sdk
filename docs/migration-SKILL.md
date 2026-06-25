@@ -550,21 +550,23 @@ Validator behavior:
 
 - Do not add validator imports for normal migrations.
 - Do not install `ajv`, `ajv-formats`, or `@cfworker/json-schema` for the default path; client/server bundle the runtime-selected defaults and the root entry point does not pull either dep in.
-- To customize the built-in backend (e.g. register custom AJV formats, change `@cfworker/json-schema` draft), import the named class from the package subpath: `@modelcontextprotocol/{client,server}/validators/ajv` for `AjvJsonSchemaValidator`,
+- To customize the built-in backend (e.g. register custom AJV formats, change `@cfworker/json-schema` draft), import `Ajv2020`, `addFormats`, and `AjvJsonSchemaValidator` from the package subpath: `@modelcontextprotocol/{client,server}/validators/ajv`,
   `@modelcontextprotocol/{client,server}/validators/cf-worker` for `CfWorkerJsonSchemaValidator`. Importing from a subpath means the corresponding peer dep must be in your `package.json`.
+- Use `Ajv2020` for AJV customization. A plain `Ajv` instance uses draft-07 semantics and does not match MCP's JSON Schema 2020-12 default.
 - To replace validation entirely, pass `jsonSchemaValidator: myCustomValidator` with your own implementation of the `jsonSchemaValidator` interface.
 
 ## 15. JSON Schema 2020-12 Tool Schemas & `structuredContent` (SEP-2106)
 
 Tool schemas conform to full JSON Schema 2020-12, and `structuredContent` may be any JSON value.
 
-| Aspect | v1 / pre-SEP | v2 / SEP-2106 |
-| --- | --- | --- |
-| `inputSchema` root | `type: "object"` + `properties`/`required` only | `type: "object"` required, **plus** any 2020-12 keyword (`oneOf`/`anyOf`/`allOf`/`not`, `if`/`then`/`else`, `$ref`/`$defs`/`$anchor`) |
-| `outputSchema` root | `type: "object"` only | **any** valid JSON Schema 2020-12 (object, array, primitive, composition) |
-| `CallToolResult.structuredContent` type | `{ [key: string]: unknown }` | `unknown` (**source-breaking**) |
-| `client.callTool(...)` | returns `structuredContent` as object | returns `structuredContent` as `unknown`; narrow it before property access |
-| `registerTool` handler return | `structuredContent` untyped | type-checked against the tool's `outputSchema` inferred output |
+| Aspect                                         | v1 / pre-SEP                                             | v2 / SEP-2106                                                                                                                         |
+| ---------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `inputSchema` root                             | `type: "object"` + `properties`/`required` only          | `type: "object"` required, **plus** any 2020-12 keyword (`oneOf`/`anyOf`/`allOf`/`not`, `if`/`then`/`else`, `$ref`/`$defs`/`$anchor`) |
+| `outputSchema` root                            | `type: "object"` only                                    | **any** valid JSON Schema 2020-12 (object, array, primitive, composition)                                                             |
+| `Tool.inputSchema` / `Tool.outputSchema` types | object schema with typed `properties`/`required` members | broad JSON Schema records; narrow before reading keyword properties (**source-breaking**)                                             |
+| `CallToolResult.structuredContent` type        | `{ [key: string]: unknown }`                             | `unknown` (**source-breaking**)                                                                                                       |
+| `client.callTool(...)`                         | returns `structuredContent` as object                    | returns `structuredContent` as `unknown`; narrow it before property access                                                            |
+| `registerTool` handler return                  | `structuredContent` untyped                              | type-checked against the tool's `outputSchema` inferred output                                                                        |
 
 Source-breaking fix — property access on `structuredContent` needs a type or a guard:
 
@@ -573,8 +575,17 @@ Source-breaking fix — property access on `structuredContent` needs a type or a
 // After:
 const result = await client.callTool({ name: 'get_weather', arguments: { city: 'SF' } });
 const sc = result.structuredContent;
-const temp =
-    typeof sc === 'object' && sc !== null && !Array.isArray(sc) ? (sc as Record<string, unknown>).temperature : undefined;
+const temp = typeof sc === 'object' && sc !== null && !Array.isArray(sc) ? (sc as Record<string, unknown>).temperature : undefined;
+```
+
+Source-breaking fix — property access on `Tool.inputSchema` / `Tool.outputSchema` keyword fields also needs narrowing:
+
+```typescript
+const schema = tool.inputSchema;
+const properties =
+    typeof schema === 'object' && schema !== null && !Array.isArray(schema)
+        ? (schema as Record<string, unknown>).properties
+        : undefined;
 ```
 
 Behavior notes:
@@ -594,7 +605,7 @@ Behavior notes:
 8. If using server SSE transport, migrate to Streamable HTTP
 9. If using server auth from the SDK: RS helpers (`requireBearerAuth`, `mcpAuthMetadataRouter`, `OAuthTokenVerifier`) → `@modelcontextprotocol/express`; AS helpers → `@modelcontextprotocol/server-legacy/auth` (deprecated); migrate AS to external IdP/OAuth library
 10. If relying on `listTools()`/`listPrompts()`/etc. throwing on missing capabilities, set `enforceStrictCapabilities: true`
-11. If you read properties off `result.structuredContent`, add a narrowing guard — it is now typed `unknown` (section 15)
+11. If you read properties off `Tool.inputSchema`, `Tool.outputSchema`, or `result.structuredContent`, add narrowing guards (section 15)
 12. Format the changed files with the project's formatter (`prettier --write`, `eslint --fix`, or `biome format --write`) — edits are not reformatted automatically, and the wrapped schemas (step 5) and rewritten `setRequestHandler` method strings (section 9) frequently need it to
     satisfy lint
 13. Verify: build with `tsc` / run tests

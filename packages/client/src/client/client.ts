@@ -814,11 +814,8 @@ export class Client extends Protocol<ClientContext> {
      * ```
      */
     async callTool(params: CallToolRequest['params'], options?: RequestOptions): Promise<CallToolResult> {
-        const result = await this._requestWithSchema({ method: 'tools/call', params }, CallToolResultSchema, options);
-
         // If the tool advertised an outputSchema that failed to compile (e.g. a SEP-2106 safety-guard
-        // rejection), surface that error now — scoped to this tool — rather than silently skipping
-        // output validation.
+        // rejection), surface that error before executing a potentially side-effecting tool.
         const validatorError = this._toolOutputValidatorErrors.get(params.name);
         if (validatorError) {
             throw new ProtocolError(
@@ -826,6 +823,8 @@ export class Client extends Protocol<ClientContext> {
                 `Tool ${params.name} has an output schema that could not be compiled: ${validatorError.message}`
             );
         }
+
+        const result = await this._requestWithSchema({ method: 'tools/call', params }, CallToolResultSchema, options);
 
         // Check if the tool has an outputSchema
         const validator = this.getToolOutputValidator(params.name);
