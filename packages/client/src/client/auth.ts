@@ -635,6 +635,7 @@ async function authInternal(
     let discoveryStateToSave: OAuthDiscoveryState | undefined;
     let authorizationServerSource: OAuthServerInfo['authorizationServerSource'];
     let reusedSavedAuthorizationServerAfterUnvalidatedDiscovery = false;
+    let currentAuthorizationServerWasPrmValidated = false;
 
     // If resourceMetadataUrl is not provided, try to load it from cached state.
     // This handles browser redirects where the URL was saved before navigation.
@@ -688,11 +689,15 @@ async function authInternal(
 
         if (discoveryWasUnvalidated && fallbackAuthorizationServerUrl) {
             authorizationServerUrl = fallbackAuthorizationServerUrl;
-            resourceMetadata = cachedState?.resourceMetadata;
+            resourceMetadata = serverInfo.resourceMetadata ?? cachedState?.resourceMetadata;
             authorizationServerSource = cachedState?.authorizationServerSource;
             reusedSavedAuthorizationServerAfterUnvalidatedDiscovery = cachedState?.authorizationServerUrl === undefined;
+            const fallbackMatchesDiscoveredAuthorizationServer =
+                normalizeAuthorizationServerIdentity(String(fallbackAuthorizationServerUrl)) ===
+                normalizeAuthorizationServerIdentity(String(serverInfo.authorizationServerUrl));
             metadata =
                 cachedState?.authorizationServerMetadata ??
+                (fallbackMatchesDiscoveredAuthorizationServer ? serverInfo.authorizationServerMetadata : undefined) ??
                 (await discoverAuthorizationServerMetadata(fallbackAuthorizationServerUrl, { fetchFn }));
 
             if (cachedState?.authorizationServerUrl && metadata !== cachedState.authorizationServerMetadata) {
@@ -709,12 +714,13 @@ async function authInternal(
             metadata = serverInfo.authorizationServerMetadata;
             resourceMetadata = serverInfo.resourceMetadata;
             authorizationServerSource = serverInfo.authorizationServerSource;
+            currentAuthorizationServerWasPrmValidated = authorizationServerSource === 'protected-resource-metadata';
 
             // Persist discovery state for future use
             // TODO: resourceMetadataUrl is only populated when explicitly provided via options
             // or loaded from cached state. The URL derived internally by
             // discoverOAuthProtectedResourceMetadata() is not captured back here.
-            if (authorizationServerSource === 'protected-resource-metadata') {
+            if (authorizationServerSource === 'protected-resource-metadata' || !fallbackAuthorizationServerUrl) {
                 discoveryStateToSave = {
                     authorizationServerUrl: String(authorizationServerUrl),
                     authorizationServerSource,
@@ -743,9 +749,7 @@ async function authInternal(
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .map(value => normalizeAuthorizationServerIdentity(value));
     const currentAuthServerIdentities = (
-        authorizationServerSource === 'legacy-fallback'
-            ? []
-            : [metadata?.issuer, ...(authorizationServerSource === 'protected-resource-metadata' ? [String(authorizationServerUrl)] : [])]
+        currentAuthorizationServerWasPrmValidated ? [metadata?.issuer, String(authorizationServerUrl)] : []
     )
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .map(value => normalizeAuthorizationServerIdentity(value));
