@@ -264,8 +264,7 @@ export class Client extends Protocol<ClientContext> {
     private _setupListChangedHandlers(config: ListChangedHandlers): void {
         if (config.tools && this._serverCapabilities?.tools?.listChanged) {
             this._setupListChangedHandler('tools', 'notifications/tools/list_changed', config.tools, async () => {
-                const result = await this.listTools();
-                return result.tools;
+                return this._listAllTools();
             });
         }
 
@@ -282,6 +281,19 @@ export class Client extends Protocol<ClientContext> {
                 return result.resources;
             });
         }
+    }
+
+    private async _listAllTools(): Promise<Tool[]> {
+        const tools: Tool[] = [];
+        let cursor: string | undefined;
+
+        do {
+            const result = await this.listTools(cursor === undefined ? undefined : { cursor });
+            tools.push(...result.tools);
+            cursor = result.nextCursor;
+        } while (cursor !== undefined);
+
+        return tools;
     }
 
     /**
