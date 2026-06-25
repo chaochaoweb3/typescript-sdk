@@ -711,7 +711,13 @@ async function authInternal(
             }
         } else {
             authorizationServerUrl = serverInfo.authorizationServerUrl;
-            metadata = serverInfo.authorizationServerMetadata;
+            const discoveredAuthorizationServerMatchesCached =
+                cachedState?.authorizationServerUrl !== undefined &&
+                normalizeAuthorizationServerIdentity(String(serverInfo.authorizationServerUrl)) ===
+                    normalizeAuthorizationServerIdentity(cachedState.authorizationServerUrl);
+            metadata =
+                serverInfo.authorizationServerMetadata ??
+                (discoveredAuthorizationServerMatchesCached ? cachedState?.authorizationServerMetadata : undefined);
             resourceMetadata = serverInfo.resourceMetadata;
             authorizationServerSource = serverInfo.authorizationServerSource;
             currentAuthorizationServerWasPrmValidated = authorizationServerSource === 'protected-resource-metadata';
