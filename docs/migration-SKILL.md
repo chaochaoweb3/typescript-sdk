@@ -515,6 +515,10 @@ members of the request/result/notification unions, the `tasks` capability key, `
 
 `Client.listPrompts()`, `listResources()`, `listResourceTemplates()`, `listTools()` now return empty results when the server lacks the corresponding capability (instead of sending the request). Set `enforceStrictCapabilities: true` in `ClientOptions` to throw an error instead.
 
+OAuth client discovery validates authorization-server metadata issuer values per RFC 8414 Section 3.3. Metadata discovered for a protected-resource metadata authorization server URL must have a matching `issuer`; cached discovery state is also revalidated. The public
+`discoverAuthorizationServerMetadata()` helper throws for mismatched or invalid issuers unless called with `{ validateIssuer: false }`. Legacy no-PRM fallback still discovers metadata at the MCP server origin and adopts a distinct valid metadata `issuer` for saved discovery
+state.
+
 ### Server (Streamable HTTP transport)
 
 No code changes required; these are wire-behavior notes:

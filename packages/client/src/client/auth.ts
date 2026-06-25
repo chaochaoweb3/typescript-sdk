@@ -1366,19 +1366,17 @@ export interface DiscoverAuthorizationServerMetadataOptions {
     fetchFn?: FetchLike;
     /** MCP protocol version sent during metadata discovery. */
     protocolVersion?: string;
-}
-
-interface DiscoverAuthorizationServerMetadataInternalOptions extends DiscoverAuthorizationServerMetadataOptions {
+    /**
+     * Whether to validate discovered metadata's issuer against the discovery URL.
+     * Defaults to true. Set to false only when discovery intentionally starts from
+     * an alias URL whose metadata may name a canonical issuer.
+     */
     validateIssuer?: boolean;
 }
 
 async function discoverAuthorizationServerMetadataInternal(
     authorizationServerUrl: string | URL,
-    {
-        fetchFn = fetch,
-        protocolVersion = LATEST_PROTOCOL_VERSION,
-        validateIssuer = true
-    }: DiscoverAuthorizationServerMetadataInternalOptions = {}
+    { fetchFn = fetch, protocolVersion = LATEST_PROTOCOL_VERSION, validateIssuer = true }: DiscoverAuthorizationServerMetadataOptions = {}
 ): Promise<AuthorizationServerMetadata | undefined> {
     const headers = {
         'MCP-Protocol-Version': protocolVersion,
@@ -1443,7 +1441,10 @@ async function discoverAuthorizationServerMetadataInternal(
  * @param options - Configuration options
  * @param options.fetchFn - Optional fetch function for making HTTP requests, defaults to global fetch
  * @param options.protocolVersion - MCP protocol version to use, defaults to {@linkcode LATEST_PROTOCOL_VERSION}
+ * @param options.validateIssuer - Whether to validate metadata's issuer against the discovery URL, defaults to true
  * @returns Promise resolving to authorization server metadata, or undefined if discovery fails
+ * @throws {Error} If discovered metadata has an invalid issuer or the issuer does not match
+ *                 the discovery URL while issuer validation is enabled
  */
 export async function discoverAuthorizationServerMetadata(
     authorizationServerUrl: string | URL,
@@ -1538,13 +1539,18 @@ export async function discoverOAuthServerInfo(
     });
 
     if (!authorizationServerUrlFromResourceMetadata && authorizationServerMetadata) {
-        const fallbackIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerUrl, 'Authorization server URL');
-        const metadataIssuer = normalizeDiscoveredIssuerIdentifier(
-            authorizationServerMetadata.issuer,
-            'Authorization server metadata issuer'
-        );
-        if (metadataIssuer !== fallbackIssuer) {
-            authorizationServerUrl = authorizationServerMetadata.issuer;
+        try {
+            const fallbackIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerUrl, 'Authorization server URL');
+            const metadataIssuer = normalizeDiscoveredIssuerIdentifier(
+                authorizationServerMetadata.issuer,
+                'Authorization server metadata issuer'
+            );
+            if (metadataIssuer !== fallbackIssuer) {
+                authorizationServerUrl = authorizationServerMetadata.issuer;
+            }
+        } catch {
+            // Legacy no-PRM discovery intentionally disables issuer validation. Keep the
+            // fallback MCP origin when legacy metadata has an unparseable issuer value.
         }
     }
 
