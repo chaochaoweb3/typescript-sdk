@@ -72,8 +72,8 @@ class InteractiveOAuthClient {
     /**
      * Starts a temporary HTTP server to receive the OAuth callback
      */
-    private async waitForOAuthCallback(): Promise<string> {
-        return new Promise<string>((resolve, reject) => {
+    private async waitForOAuthCallback(): Promise<{ code: string; iss: string | null }> {
+        return new Promise<{ code: string; iss: string | null }>((resolve, reject) => {
             const server = createServer((req, res) => {
                 // Ignore favicon requests
                 if (req.url === '/favicon.ico') {
@@ -85,6 +85,7 @@ class InteractiveOAuthClient {
                 console.log(`📥 Received callback: ${req.url}`);
                 const parsedUrl = new URL(req.url || '', 'http://localhost');
                 const code = parsedUrl.searchParams.get('code');
+                const iss = parsedUrl.searchParams.get('iss');
                 const error = parsedUrl.searchParams.get('error');
 
                 if (code) {
@@ -100,7 +101,7 @@ class InteractiveOAuthClient {
             </html>
           `);
 
-                    resolve(code);
+                    resolve({ code, iss });
                     setTimeout(() => server.close(), 3000);
                 } else if (error) {
                     console.log(`❌ Authorization error: ${error}`);
@@ -143,9 +144,8 @@ class InteractiveOAuthClient {
         } catch (error) {
             if (error instanceof UnauthorizedError) {
                 console.log('🔐 OAuth required - waiting for authorization...');
-                const callbackPromise = this.waitForOAuthCallback();
-                const authCode = await callbackPromise;
-                await transport.finishAuth(authCode);
+                const { code: authCode, iss } = await this.waitForOAuthCallback();
+                await transport.finishAuth(authCode, { iss });
                 console.log('🔐 Authorization code received:', authCode);
                 console.log('🔌 Reconnecting with authenticated transport...');
                 await this.attemptConnection(oauthProvider);

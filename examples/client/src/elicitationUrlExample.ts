@@ -440,8 +440,8 @@ async function handleURLElicitation(params: ElicitRequestURLParams): Promise<Eli
 /**
  * Starts a temporary HTTP server to receive the OAuth callback
  */
-async function waitForOAuthCallback(): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
+async function waitForOAuthCallback(): Promise<{ code: string; iss: string | null }> {
+    return new Promise<{ code: string; iss: string | null }>((resolve, reject) => {
         const server = createServer((req, res) => {
             // Ignore favicon requests
             if (req.url === '/favicon.ico') {
@@ -453,6 +453,7 @@ async function waitForOAuthCallback(): Promise<string> {
             console.log(`📥 Received callback: ${req.url}`);
             const parsedUrl = new URL(req.url || '', 'http://localhost');
             const code = parsedUrl.searchParams.get('code');
+            const iss = parsedUrl.searchParams.get('iss');
             const error = parsedUrl.searchParams.get('error');
 
             if (code) {
@@ -469,7 +470,7 @@ async function waitForOAuthCallback(): Promise<string> {
           </html>
         `);
 
-                resolve(code);
+                resolve({ code, iss });
                 setTimeout(() => server.close(), 15_000);
             } else if (error) {
                 console.log(`❌ Authorization error: ${error}`);
@@ -519,9 +520,8 @@ async function attemptConnection(oauthProvider: InMemoryOAuthClientProvider): Pr
     } catch (error) {
         if (error instanceof UnauthorizedError) {
             console.log('🔐 OAuth required - waiting for authorization...');
-            const callbackPromise = waitForOAuthCallback();
-            const authCode = await callbackPromise;
-            await transport.finishAuth(authCode);
+            const { code: authCode, iss } = await waitForOAuthCallback();
+            await transport.finishAuth(authCode, { iss });
             console.log('🔐 Authorization code received:', authCode);
             console.log('🔌 Reconnecting with authenticated transport...');
             // Recursively retry connection after OAuth completion
