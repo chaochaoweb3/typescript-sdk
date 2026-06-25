@@ -703,7 +703,7 @@ server.setRequestHandler('tools/call', async (request, ctx) => {
 });
 ```
 
-Standard Schemas passed to `elicitInput` are converted to MCP's restricted form-elicitation JSON Schema before being sent. They must describe a flat object with primitive properties; accepted responses are parsed with the original schema before `result.content` is returned. With Zod v4, use `.meta({ title: 'Field Label' })` for short form-field labels.
+Standard Schemas passed to `elicitInput` are converted to MCP's restricted form-elicitation JSON Schema before being sent. They must describe a flat object with primitive properties; accepted responses are parsed with the original schema before `result.content` is returned. With Zod v4, use `.meta({ title: 'Field Label' })` for short form-field labels. Zod string helpers that emit the supported `email`, `uri`, `date`, or `date-time` formats are accepted; arbitrary `.regex()` patterns are rejected because form elicitation does not carry JSON Schema `pattern`.
 
 These replace the pattern of calling `server.sendLoggingMessage()`, `server.createMessage()`, and `server.elicitInput()` from within handlers.
 
