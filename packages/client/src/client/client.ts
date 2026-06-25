@@ -24,9 +24,11 @@ import type {
     MessageExtraInfo,
     NotificationMethod,
     ProtocolOptions,
+    Prompt,
     ReadResourceRequest,
     RequestMethod,
     RequestOptions,
+    Resource,
     Result,
     ServerCapabilities,
     SubscribeRequest,
@@ -270,15 +272,13 @@ export class Client extends Protocol<ClientContext> {
 
         if (config.prompts && this._serverCapabilities?.prompts?.listChanged) {
             this._setupListChangedHandler('prompts', 'notifications/prompts/list_changed', config.prompts, async () => {
-                const result = await this.listPrompts();
-                return result.prompts;
+                return this._listAllPrompts();
             });
         }
 
         if (config.resources && this._serverCapabilities?.resources?.listChanged) {
             this._setupListChangedHandler('resources', 'notifications/resources/list_changed', config.resources, async () => {
-                const result = await this.listResources();
-                return result.resources;
+                return this._listAllResources();
             });
         }
     }
@@ -294,6 +294,32 @@ export class Client extends Protocol<ClientContext> {
         } while (cursor !== undefined);
 
         return tools;
+    }
+
+    private async _listAllPrompts(): Promise<Prompt[]> {
+        const prompts: Prompt[] = [];
+        let cursor: string | undefined;
+
+        do {
+            const result = await this.listPrompts(cursor === undefined ? undefined : { cursor });
+            prompts.push(...result.prompts);
+            cursor = result.nextCursor;
+        } while (cursor !== undefined);
+
+        return prompts;
+    }
+
+    private async _listAllResources(): Promise<Resource[]> {
+        const resources: Resource[] = [];
+        let cursor: string | undefined;
+
+        do {
+            const result = await this.listResources(cursor === undefined ? undefined : { cursor });
+            resources.push(...result.resources);
+            cursor = result.nextCursor;
+        } while (cursor !== undefined);
+
+        return resources;
     }
 
     /**
