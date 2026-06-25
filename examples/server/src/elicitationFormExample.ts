@@ -13,6 +13,7 @@ import { createMcpExpressApp } from '@modelcontextprotocol/express';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { isInitializeRequest, McpServer } from '@modelcontextprotocol/server';
 import type { Request, Response } from 'express';
+import * as z from 'zod/v4';
 
 // Create a fresh MCP server per client connection to avoid shared state between clients.
 // The validator supports format validation (email, date, etc.) if ajv-formats is installed.
@@ -38,51 +39,23 @@ const getServer = () => {
         },
         async () => {
             try {
+                const registrationSchema = z.object({
+                    username: z.string().min(3).max(20).describe('Your desired username (3-20 characters)'),
+                    email: z.string().email().describe('Your email address'),
+                    password: z.string().min(8).describe('Your password (min 8 characters)'),
+                    newsletter: z.boolean().default(false).describe('Subscribe to newsletter?')
+                });
+
                 // Request user information through form elicitation
                 const result = await mcpServer.server.elicitInput({
                     mode: 'form',
                     message: 'Please provide your registration information:',
-                    requestedSchema: {
-                        type: 'object',
-                        properties: {
-                            username: {
-                                type: 'string',
-                                title: 'Username',
-                                description: 'Your desired username (3-20 characters)',
-                                minLength: 3,
-                                maxLength: 20
-                            },
-                            email: {
-                                type: 'string',
-                                title: 'Email',
-                                description: 'Your email address',
-                                format: 'email'
-                            },
-                            password: {
-                                type: 'string',
-                                title: 'Password',
-                                description: 'Your password (min 8 characters)',
-                                minLength: 8
-                            },
-                            newsletter: {
-                                type: 'boolean',
-                                title: 'Newsletter',
-                                description: 'Subscribe to newsletter?',
-                                default: false
-                            }
-                        },
-                        required: ['username', 'email', 'password']
-                    }
+                    requestedSchema: registrationSchema
                 });
 
                 // Handle the different possible actions
                 if (result.action === 'accept' && result.content) {
-                    const { username, email, newsletter } = result.content as {
-                        username: string;
-                        email: string;
-                        password: string;
-                        newsletter?: boolean;
-                    };
+                    const { username, email, newsletter } = result.content;
 
                     return {
                         content: [

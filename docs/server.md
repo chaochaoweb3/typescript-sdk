@@ -497,6 +497,9 @@ Elicitation lets a tool handler request direct input from the user — form fiel
 > [!IMPORTANT]
 > Sensitive information must not be collected via form elicitation; always use URL elicitation or out-of-band flows for secrets.
 
+For form elicitation, pass either the restricted JSON Schema shape used by the MCP wire protocol or a Standard Schema such as a Zod object. Standard Schemas are converted to the restricted elicitation JSON Schema before being sent, so they must describe a flat object with
+primitive properties (`string`, `number`, `integer`, `boolean`, or string enum fields). When the user accepts the form, `result.content` is parsed with the original Standard Schema and is typed as that schema's output.
+
 Call `ctx.mcpReq.elicitInput(params)` (from {@linkcode @modelcontextprotocol/server!index.ServerContext | ServerContext}) inside a tool handler:
 
 ```ts source="../examples/server/src/serverGuide.examples.ts#registerTool_elicitation"
@@ -510,19 +513,10 @@ server.registerTool(
         const result = await ctx.mcpReq.elicitInput({
             mode: 'form',
             message: 'Please share your feedback:',
-            requestedSchema: {
-                type: 'object',
-                properties: {
-                    rating: {
-                        type: 'number',
-                        title: 'Rating (1\u20135)',
-                        minimum: 1,
-                        maximum: 5
-                    },
-                    comment: { type: 'string', title: 'Comment' }
-                },
-                required: ['rating']
-            }
+            requestedSchema: z.object({
+                rating: z.number().min(1).max(5).describe('Rating (1-5)'),
+                comment: z.string().optional().describe('Comment')
+            })
         });
         if (result.action === 'accept') {
             return {

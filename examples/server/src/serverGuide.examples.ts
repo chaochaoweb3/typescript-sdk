@@ -418,19 +418,10 @@ function registerTool_elicitation(server: McpServer) {
             const result = await ctx.mcpReq.elicitInput({
                 mode: 'form',
                 message: 'Please share your feedback:',
-                requestedSchema: {
-                    type: 'object',
-                    properties: {
-                        rating: {
-                            type: 'number',
-                            title: 'Rating (1\u20135)',
-                            minimum: 1,
-                            maximum: 5
-                        },
-                        comment: { type: 'string', title: 'Comment' }
-                    },
-                    required: ['rating']
-                }
+                requestedSchema: z.object({
+                    rating: z.number().min(1).max(5).describe('Rating (1-5)'),
+                    comment: z.string().optional().describe('Comment')
+                })
             });
             if (result.action === 'accept') {
                 return {
