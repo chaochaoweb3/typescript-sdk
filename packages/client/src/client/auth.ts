@@ -627,10 +627,14 @@ async function authInternal(
 ): Promise<AuthResult> {
     // Check if the provider has cached discovery state to skip discovery
     const cachedState = await provider.discoveryState?.();
+    const savedAuthorizationServerUrl = await provider.authorizationServerUrl?.();
 
     let resourceMetadata: OAuthProtectedResourceMetadata | undefined;
     let authorizationServerUrl: string | URL;
     let metadata: AuthorizationServerMetadata | undefined;
+    let discoveryStateToSave: OAuthDiscoveryState | undefined;
+    let authorizationServerSource: OAuthServerInfo['authorizationServerSource'];
+    let reusedSavedAuthorizationServerAfterUnvalidatedDiscovery = false;
 
     // If resourceMetadataUrl is not provided, try to load it from cached state.
     // This handles browser redirects where the URL was saved before navigation.
@@ -644,6 +648,7 @@ async function authInternal(
         // Restore discovery state from cache
         authorizationServerUrl = cachedState.authorizationServerUrl;
         resourceMetadata = cachedState.resourceMetadata;
+        authorizationServerSource = cachedState.authorizationServerSource;
         metadata =
             cachedState.authorizationServerMetadata ?? (await discoverAuthorizationServerMetadata(authorizationServerUrl, { fetchFn }));
 
@@ -667,37 +672,57 @@ async function authInternal(
 
         // Re-save if we enriched the cached state with missing metadata
         if (metadata !== cachedState.authorizationServerMetadata || resourceMetadata !== cachedState.resourceMetadata) {
-            await provider.saveDiscoveryState?.({
+            discoveryStateToSave = {
                 authorizationServerUrl: String(authorizationServerUrl),
+                authorizationServerSource,
                 resourceMetadataUrl: effectiveResourceMetadataUrl?.toString(),
                 resourceMetadata,
                 authorizationServerMetadata: metadata
-            });
+            };
         }
     } else {
         // Full discovery via RFC 9728
         const serverInfo = await discoverOAuthServerInfo(serverUrl, { resourceMetadataUrl: effectiveResourceMetadataUrl, fetchFn });
-        const challengedDiscoveryWasUnvalidated = shouldRefreshCachedDiscovery && serverInfo.resourceMetadata === undefined;
+        const discoveryWasUnvalidated = serverInfo.authorizationServerSource !== 'protected-resource-metadata';
+        const fallbackAuthorizationServerUrl = cachedState?.authorizationServerUrl ?? savedAuthorizationServerUrl;
 
-        if (challengedDiscoveryWasUnvalidated && cachedState?.authorizationServerUrl) {
-            authorizationServerUrl = cachedState.authorizationServerUrl;
-            resourceMetadata = cachedState.resourceMetadata;
-            metadata = cachedState.authorizationServerMetadata;
+        if (discoveryWasUnvalidated && fallbackAuthorizationServerUrl) {
+            authorizationServerUrl = fallbackAuthorizationServerUrl;
+            resourceMetadata = cachedState?.resourceMetadata;
+            authorizationServerSource = cachedState?.authorizationServerSource;
+            reusedSavedAuthorizationServerAfterUnvalidatedDiscovery = cachedState?.authorizationServerUrl === undefined;
+            metadata =
+                cachedState?.authorizationServerMetadata ??
+                (await discoverAuthorizationServerMetadata(fallbackAuthorizationServerUrl, { fetchFn }));
+
+            if (cachedState?.authorizationServerUrl && metadata !== cachedState.authorizationServerMetadata) {
+                discoveryStateToSave = {
+                    authorizationServerUrl: String(authorizationServerUrl),
+                    authorizationServerSource,
+                    resourceMetadataUrl: effectiveResourceMetadataUrl?.toString(),
+                    resourceMetadata,
+                    authorizationServerMetadata: metadata
+                };
+            }
         } else {
             authorizationServerUrl = serverInfo.authorizationServerUrl;
             metadata = serverInfo.authorizationServerMetadata;
             resourceMetadata = serverInfo.resourceMetadata;
+            authorizationServerSource = serverInfo.authorizationServerSource;
 
             // Persist discovery state for future use
             // TODO: resourceMetadataUrl is only populated when explicitly provided via options
             // or loaded from cached state. The URL derived internally by
             // discoverOAuthProtectedResourceMetadata() is not captured back here.
-            await provider.saveDiscoveryState?.({
-                authorizationServerUrl: String(authorizationServerUrl),
-                resourceMetadataUrl: effectiveResourceMetadataUrl?.toString(),
-                resourceMetadata,
-                authorizationServerMetadata: metadata
-            });
+            if (authorizationServerSource === 'protected-resource-metadata') {
+                discoveryStateToSave = {
+                    authorizationServerUrl: String(authorizationServerUrl),
+                    authorizationServerSource,
+                    resourceMetadataUrl: effectiveResourceMetadataUrl?.toString(),
+                    resourceMetadata,
+                    authorizationServerMetadata: metadata
+                };
+            }
         }
     }
 
@@ -707,25 +732,26 @@ async function authInternal(
     // credentials and tokens MUST NOT be reused and the client MUST re-register.
     //
     // Canonical comparison key: the validated authorization server metadata `issuer`
-    // (the identifier SEP-2352 specifies). The authorization server URL is only an
-    // additional alias when metadata was successfully discovered: if PRM discovery
-    // falls back to the resource server origin after a transient failure, treating
-    // that fallback as authoritative would destructively invalidate valid credentials.
+    // (the identifier SEP-2352 specifies). The authorization server URL is only
+    // comparable when it came from protected resource metadata. Legacy fallback to
+    // the MCP server origin is not authoritative enough to invalidate credentials.
     const previousAuthServerIdentities = [
         cachedState?.authorizationServerMetadata?.issuer,
         cachedState?.authorizationServerUrl,
-        await provider.authorizationServerUrl?.()
+        savedAuthorizationServerUrl
     ]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .map(value => normalizeAuthorizationServerIdentity(value));
-    const currentIssuer = metadata?.issuer;
-    const hasValidatedCurrentAuthorizationServer = typeof currentIssuer === 'string' && currentIssuer.length > 0;
-    const currentAuthServerIdentities = (hasValidatedCurrentAuthorizationServer ? [currentIssuer, String(authorizationServerUrl)] : [])
+    const currentAuthServerIdentities = (
+        authorizationServerSource === 'legacy-fallback'
+            ? []
+            : [metadata?.issuer, ...(authorizationServerSource === 'protected-resource-metadata' ? [String(authorizationServerUrl)] : [])]
+    )
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .map(value => normalizeAuthorizationServerIdentity(value));
     const authorizationServerChanged =
-        hasValidatedCurrentAuthorizationServer &&
         previousAuthServerIdentities.length > 0 &&
+        currentAuthServerIdentities.length > 0 &&
         !currentAuthServerIdentities.some(identity => previousAuthServerIdentities.includes(identity));
 
     if (authorizationServerChanged) {
@@ -739,8 +765,19 @@ async function authInternal(
         }
     }
 
-    // Save authorization server URL for providers that need it (e.g., CrossAppAccessProvider)
-    await provider.saveAuthorizationServerUrl?.(String(authorizationServerUrl));
+    if (discoveryStateToSave) {
+        await provider.saveDiscoveryState?.(discoveryStateToSave);
+    }
+
+    // Save authorization server URL for providers that need it (e.g., CrossAppAccessProvider).
+    // Do not replace an existing AS with legacy fallback; fallback is not authoritative
+    // enough to overwrite a URL discovered from protected resource metadata.
+    if (
+        !reusedSavedAuthorizationServerAfterUnvalidatedDiscovery &&
+        (authorizationServerSource !== 'legacy-fallback' || previousAuthServerIdentities.length === 0)
+    ) {
+        await provider.saveAuthorizationServerUrl?.(String(authorizationServerUrl));
+    }
 
     const resource: URL | undefined = await selectResourceURL(serverUrl, provider, resourceMetadata);
 
@@ -1364,6 +1401,12 @@ export interface OAuthServerInfo {
      * or `undefined` if the server does not support it.
      */
     resourceMetadata?: OAuthProtectedResourceMetadata;
+
+    /**
+     * Where the authorization server URL came from. Discovery calls set this
+     * field; it is optional so older persisted discovery state remains valid.
+     */
+    authorizationServerSource?: 'protected-resource-metadata' | 'legacy-fallback';
 }
 
 /**
@@ -1395,6 +1438,7 @@ export async function discoverOAuthServerInfo(
 ): Promise<OAuthServerInfo> {
     let resourceMetadata: OAuthProtectedResourceMetadata | undefined;
     let authorizationServerUrl: string | undefined;
+    let authorizationServerSource: OAuthServerInfo['authorizationServerSource'];
 
     try {
         resourceMetadata = await discoverOAuthProtectedResourceMetadata(
@@ -1404,6 +1448,7 @@ export async function discoverOAuthServerInfo(
         );
         if (resourceMetadata.authorization_servers && resourceMetadata.authorization_servers.length > 0) {
             authorizationServerUrl = resourceMetadata.authorization_servers[0];
+            authorizationServerSource = 'protected-resource-metadata';
         }
     } catch (error) {
         // Network failures (DNS, connection refused) surface as TypeError from fetch. Those are
@@ -1419,12 +1464,14 @@ export async function discoverOAuthServerInfo(
     // fall back to the legacy MCP spec behavior: MCP server base URL acts as the authorization server
     if (!authorizationServerUrl) {
         authorizationServerUrl = String(new URL('/', serverUrl));
+        authorizationServerSource = 'legacy-fallback';
     }
 
     const authorizationServerMetadata = await discoverAuthorizationServerMetadata(authorizationServerUrl, { fetchFn: opts?.fetchFn });
 
     return {
         authorizationServerUrl,
+        authorizationServerSource,
         authorizationServerMetadata,
         resourceMetadata
     };
