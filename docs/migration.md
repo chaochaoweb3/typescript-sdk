@@ -696,14 +696,14 @@ server.setRequestHandler('tools/call', async (request, ctx) => {
     // Or pass a Standard Schema such as a Zod object for typed content.
     const typedElicitResult = await ctx.mcpReq.elicitInput({
         message: 'Please provide details',
-        requestedSchema: z.object({ name: z.string() })
+        requestedSchema: z.object({ name: z.string().meta({ title: 'Name' }) })
     });
 
     return { content: [{ type: 'text', text: 'done' }] };
 });
 ```
 
-Standard Schemas passed to `elicitInput` are converted to MCP's restricted form-elicitation JSON Schema before being sent. They must describe a flat object with primitive properties; accepted responses are parsed with the original schema before `result.content` is returned.
+Standard Schemas passed to `elicitInput` are converted to MCP's restricted form-elicitation JSON Schema before being sent. They must describe a flat object with primitive properties; accepted responses are parsed with the original schema before `result.content` is returned. With Zod v4, use `.meta({ title: 'Field Label' })` for short form-field labels.
 
 These replace the pattern of calling `server.sendLoggingMessage()`, `server.createMessage()`, and `server.elicitInput()` from within handlers.
 

@@ -40,10 +40,10 @@ const getServer = () => {
         async () => {
             try {
                 const registrationSchema = z.object({
-                    username: z.string().min(3).max(20).describe('Your desired username (3-20 characters)'),
-                    email: z.string().email().describe('Your email address'),
-                    password: z.string().min(8).describe('Your password (min 8 characters)'),
-                    newsletter: z.boolean().default(false).describe('Subscribe to newsletter?')
+                    username: z.string().min(3).max(20).meta({ title: 'Username', description: 'Your desired username (3-20 characters)' }),
+                    email: z.string().email().meta({ title: 'Email', description: 'Your email address' }),
+                    password: z.string().min(8).meta({ title: 'Password', description: 'Your password (min 8 characters)' }),
+                    newsletter: z.boolean().default(false).meta({ title: 'Newsletter', description: 'Subscribe to newsletter?' })
                 });
 
                 // Request user information through form elicitation

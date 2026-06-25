@@ -419,8 +419,8 @@ function registerTool_elicitation(server: McpServer) {
                 mode: 'form',
                 message: 'Please share your feedback:',
                 requestedSchema: z.object({
-                    rating: z.number().min(1).max(5).describe('Rating (1-5)'),
-                    comment: z.string().optional().describe('Comment')
+                    rating: z.number().min(1).max(5).meta({ title: 'Rating (1-5)' }),
+                    comment: z.string().optional().meta({ title: 'Comment' })
                 })
             });
             if (result.action === 'accept') {
