@@ -11,6 +11,7 @@
 import { Validator } from '@cfworker/json-schema';
 
 import { assertSchemaSafeToCompile } from './schemaBounds';
+import { normalizeLegacyTupleSchema } from './schemaCompatibility';
 import type { JsonSchemaType, JsonSchemaValidator, jsonSchemaValidator, JsonSchemaValidatorResult } from './types';
 import { MCP_DEFAULT_SCHEMA_DIALECT } from './types';
 
@@ -64,9 +65,10 @@ export class CfWorkerJsonSchemaValidator implements jsonSchemaValidator {
     getValidator<T>(schema: JsonSchemaType): JsonSchemaValidator<T> {
         // SEP-2106: reject non-local $refs (SSRF) and over-budget schemas (composition DoS) before compiling.
         assertSchemaSafeToCompile(schema);
+        const normalizedSchema = this.draft === MCP_DEFAULT_SCHEMA_DIALECT ? normalizeLegacyTupleSchema(schema) : schema;
 
         // Cast to the cfworker Schema type - our JsonSchemaType is structurally compatible
-        const validator = new Validator(schema as ConstructorParameters<typeof Validator>[0], this.draft, this.shortcircuit);
+        const validator = new Validator(normalizedSchema as ConstructorParameters<typeof Validator>[0], this.draft, this.shortcircuit);
 
         return (input: unknown): JsonSchemaValidatorResult<T> => {
             const result = validator.validate(input);

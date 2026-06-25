@@ -7,6 +7,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import _addFormats from 'ajv-formats';
 
 import { assertSchemaSafeToCompile } from './schemaBounds';
+import { normalizeLegacyTupleSchema } from './schemaCompatibility';
 import type { JsonSchemaType, JsonSchemaValidator, jsonSchemaValidator, JsonSchemaValidatorResult } from './types';
 
 /** Structural subset of the AJV interface used by {@link AjvJsonSchemaValidator}. */
@@ -67,6 +68,7 @@ function createDefaultAjvInstance(): Ajv {
  */
 export class AjvJsonSchemaValidator implements jsonSchemaValidator {
     private _ajv: AjvLike;
+    private _normalizeLegacyTuples: boolean;
 
     /**
      * @param ajv - Optional pre-configured AJV-compatible instance. If omitted, a default instance is
@@ -76,16 +78,18 @@ export class AjvJsonSchemaValidator implements jsonSchemaValidator {
      */
     constructor(ajv?: AjvLike) {
         this._ajv = ajv ?? createDefaultAjvInstance();
+        this._normalizeLegacyTuples = ajv === undefined || ajv instanceof Ajv2020;
     }
 
     getValidator<T>(schema: JsonSchemaType): JsonSchemaValidator<T> {
         // SEP-2106: reject non-local $refs (SSRF) and over-budget schemas (composition DoS) before compiling.
         assertSchemaSafeToCompile(schema);
+        const normalizedSchema = this._normalizeLegacyTuples ? normalizeLegacyTupleSchema(schema) : schema;
 
         const ajvValidator =
-            '$id' in schema && typeof schema.$id === 'string'
-                ? (this._ajv.getSchema(schema.$id) ?? this._ajv.compile(schema))
-                : this._ajv.compile(schema);
+            '$id' in normalizedSchema && typeof normalizedSchema.$id === 'string'
+                ? (this._ajv.getSchema(normalizedSchema.$id) ?? this._ajv.compile(normalizedSchema))
+                : this._ajv.compile(normalizedSchema);
 
         return (input: unknown): JsonSchemaValidatorResult<T> => {
             const valid = ajvValidator(input);

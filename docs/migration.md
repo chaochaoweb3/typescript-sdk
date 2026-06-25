@@ -1009,6 +1009,9 @@ const server = new McpServer(
 If you import from one of these subpaths in your own code, the corresponding peer dep (`ajv` + `ajv-formats`, or `@cfworker/json-schema`) needs to be installed in your `package.json`. The runtime shim continues to vendor a copy for the default code path, so you can use the
 subpath in some files and rely on the default in others. For AJV customization, use the re-exported `Ajv2020` class; a plain `Ajv` instance uses draft-07 semantics and will not validate JSON Schema 2020-12 keywords such as `prefixItems` the same way as MCP's default validator.
 
+For compatibility with existing draft-07 tuple schemas, the built-in validators using the default 2020-12 dialect normalize legacy `items: [...]` plus `additionalItems` syntax to the equivalent 2020-12 `prefixItems`/`items` form before compiling. New schemas should use
+`prefixItems` directly.
+
 To replace validation wholesale rather than customizing the built-in classes, implement the `jsonSchemaValidator` interface and pass your own implementation through the option above.
 
 ### Tool schemas conform to JSON Schema 2020-12; `structuredContent` may be any JSON value (SEP-2106)
