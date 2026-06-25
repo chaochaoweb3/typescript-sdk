@@ -346,6 +346,8 @@ server.registerPrompt(
 > [!WARNING]
 > MCP logging is deprecated as of protocol version 2026-07-28 (SEP-2577). It remains fully functional during the deprecation window (at least twelve months); see the [deprecated features registry](https://modelcontextprotocol.io/specification/draft/deprecated). Migrate to stderr logging (STDIO servers) or OpenTelemetry.
 
+This section covers MCP protocol logging sent from your server to the client. SDK-internal diagnostics, such as tool-name validation warnings and schema conversion fallbacks, are separate and use the `logger` constructor option on `Server` and `McpServer`. The option defaults to `console`; each logger method is optional, so omitted levels are skipped.
+
 Logging lets your server send structured diagnostics — debug traces, progress updates, warnings — to the connected client as notifications (see [Logging](https://modelcontextprotocol.io/specification/latest/server/utilities/logging) in the MCP specification).
 
 Declare the `logging` capability, then call `ctx.mcpReq.log(level, data)` (from {@linkcode @modelcontextprotocol/server!index.ServerContext | ServerContext}) inside any handler:

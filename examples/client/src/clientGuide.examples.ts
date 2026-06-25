@@ -368,6 +368,24 @@ async function listChanged_basic() {
     return client;
 }
 
+/** Example: Route SDK diagnostics through an application logger. */
+function sdkLogger_basic() {
+    //#region sdkLogger_basic
+    const client = new Client(
+        { name: 'my-client', version: '1.0.0' },
+        {
+            logger: {
+                warn: (...args) => console.warn('[mcp-sdk]', ...args),
+                debug: () => {
+                    // Drop debug diagnostics
+                }
+            }
+        }
+    );
+    //#endregion sdkLogger_basic
+    return client;
+}
+
 // ---------------------------------------------------------------------------
 // Handling server-initiated requests
 // ---------------------------------------------------------------------------
@@ -615,6 +633,7 @@ void complete_basic;
 void notificationHandler_basic;
 void setLoggingLevel_basic;
 void listChanged_basic;
+void sdkLogger_basic;
 void capabilities_declaration;
 void sampling_handler;
 void elicitation_handler;

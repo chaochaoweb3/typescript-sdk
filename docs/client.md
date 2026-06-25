@@ -388,6 +388,24 @@ const client = new Client(
 );
 ```
 
+### SDK diagnostics logger
+
+SDK-internal diagnostics, such as capability-gating debug messages and schema conversion warnings, use the {@linkcode @modelcontextprotocol/client!index.ProtocolOptions.logger | logger} constructor option. It defaults to `console`. The logger is partial: each method is optional, and omitted levels are silently skipped.
+
+```ts source="../examples/client/src/clientGuide.examples.ts#sdkLogger_basic"
+const client = new Client(
+    { name: 'my-client', version: '1.0.0' },
+    {
+        logger: {
+            warn: (...args) => console.warn('[mcp-sdk]', ...args),
+            debug: () => {
+                // Drop debug diagnostics
+            }
+        }
+    }
+);
+```
+
 ### Manual notification handlers
 
 For full control — or for notification types not covered by `listChanged` (such as log messages) — register handlers directly with {@linkcode @modelcontextprotocol/client!client/client.Client#setNotificationHandler | setNotificationHandler()}:
