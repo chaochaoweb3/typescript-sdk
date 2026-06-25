@@ -2,6 +2,7 @@ export * from './auth/errors';
 export * from './errors/sdkErrors';
 export * from './shared/auth';
 export * from './shared/authUtils';
+export * from './shared/logger';
 export * from './shared/metadataUtils';
 export * from './shared/protocol';
 export * from './shared/stdio';
