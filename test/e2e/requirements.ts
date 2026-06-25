@@ -1935,12 +1935,7 @@ export const REQUIREMENTS: Record<string, Requirement> = {
         behavior:
             'The client rejects authorization-server metadata whose issuer does not match the URL the metadata was retrieved from (RFC 8414 section 3.3).',
         transports: ['streamableHttp'],
-        note: 'This exercises the HTTP hosting/auth layer and OAuth client; the matrix transport arg is ignored, so it runs as a single streamableHttp-labelled cell to avoid duplicate runs.',
-        knownFailures: [
-            {
-                note: 'discoverAuthorizationServerMetadata never validates that the returned issuer matches the authorization-server URL the metadata was fetched from (RFC 8414 section 3.3), so spoofed-issuer metadata is accepted and the OAuth flow proceeds to registration and redirect.'
-            }
-        ]
+        note: 'This exercises the HTTP hosting/auth layer and OAuth client; the matrix transport arg is ignored, so it runs as a single streamableHttp-labelled cell to avoid duplicate runs.'
     },
     'client-auth:prm-discovery:no-prm-fallback': {
         source: 'sdk',

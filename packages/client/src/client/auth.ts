@@ -1314,34 +1314,22 @@ export function buildDiscoveryUrls(authorizationServerUrl: string | URL): { url:
     return urlsToTry;
 }
 
-/**
- * Discovers authorization server metadata with support for
- * {@link https://datatracker.ietf.org/doc/html/rfc8414 | RFC 8414} OAuth 2.0
- * Authorization Server Metadata and
- * {@link https://openid.net/specs/openid-connect-discovery-1_0.html | OpenID Connect Discovery 1.0}
- * specifications.
- *
- * This function implements a fallback strategy for authorization server discovery:
- * 1. Attempts RFC 8414 OAuth metadata discovery first
- * 2. If OAuth discovery fails, falls back to OpenID Connect Discovery
- *
- * @param authorizationServerUrl - The authorization server URL obtained from the MCP Server's
- *                                 protected resource metadata, or the MCP server's URL if the
- *                                 metadata was not found.
- * @param options - Configuration options
- * @param options.fetchFn - Optional fetch function for making HTTP requests, defaults to global fetch
- * @param options.protocolVersion - MCP protocol version to use, defaults to {@linkcode LATEST_PROTOCOL_VERSION}
- * @returns Promise resolving to authorization server metadata, or undefined if discovery fails
- */
-export async function discoverAuthorizationServerMetadata(
+interface DiscoverAuthorizationServerMetadataOptions {
+    fetchFn?: FetchLike;
+    protocolVersion?: string;
+}
+
+interface DiscoverAuthorizationServerMetadataInternalOptions extends DiscoverAuthorizationServerMetadataOptions {
+    validateIssuer?: boolean;
+}
+
+async function discoverAuthorizationServerMetadataInternal(
     authorizationServerUrl: string | URL,
     {
         fetchFn = fetch,
-        protocolVersion = LATEST_PROTOCOL_VERSION
-    }: {
-        fetchFn?: FetchLike;
-        protocolVersion?: string;
-    } = {}
+        protocolVersion = LATEST_PROTOCOL_VERSION,
+        validateIssuer = true
+    }: DiscoverAuthorizationServerMetadataInternalOptions = {}
 ): Promise<AuthorizationServerMetadata | undefined> {
     const headers = {
         'MCP-Protocol-Version': protocolVersion,
@@ -1379,12 +1367,40 @@ export async function discoverAuthorizationServerMetadata(
                 ? OAuthMetadataSchema.parse(await response.json())
                 : OpenIdProviderDiscoveryMetadataSchema.parse(await response.json());
 
-        validateAuthorizationServerMetadataIssuer(metadata, authorizationServerUrl);
+        if (validateIssuer) {
+            validateAuthorizationServerMetadataIssuer(metadata, authorizationServerUrl);
+        }
 
         return metadata;
     }
 
     return undefined;
+}
+
+/**
+ * Discovers authorization server metadata with support for
+ * {@link https://datatracker.ietf.org/doc/html/rfc8414 | RFC 8414} OAuth 2.0
+ * Authorization Server Metadata and
+ * {@link https://openid.net/specs/openid-connect-discovery-1_0.html | OpenID Connect Discovery 1.0}
+ * specifications.
+ *
+ * This function implements a fallback strategy for authorization server discovery:
+ * 1. Attempts RFC 8414 OAuth metadata discovery first
+ * 2. If OAuth discovery fails, falls back to OpenID Connect Discovery
+ *
+ * @param authorizationServerUrl - The authorization server URL obtained from the MCP Server's
+ *                                 protected resource metadata, or the MCP server's URL if the
+ *                                 metadata was not found.
+ * @param options - Configuration options
+ * @param options.fetchFn - Optional fetch function for making HTTP requests, defaults to global fetch
+ * @param options.protocolVersion - MCP protocol version to use, defaults to {@linkcode LATEST_PROTOCOL_VERSION}
+ * @returns Promise resolving to authorization server metadata, or undefined if discovery fails
+ */
+export async function discoverAuthorizationServerMetadata(
+    authorizationServerUrl: string | URL,
+    options: DiscoverAuthorizationServerMetadataOptions = {}
+): Promise<AuthorizationServerMetadata | undefined> {
+    return discoverAuthorizationServerMetadataInternal(authorizationServerUrl, options);
 }
 
 /**
@@ -1439,6 +1455,7 @@ export async function discoverOAuthServerInfo(
 ): Promise<OAuthServerInfo> {
     let resourceMetadata: OAuthProtectedResourceMetadata | undefined;
     let authorizationServerUrl: string | undefined;
+    let authorizationServerUrlFromResourceMetadata = false;
 
     try {
         resourceMetadata = await discoverOAuthProtectedResourceMetadata(
@@ -1448,6 +1465,7 @@ export async function discoverOAuthServerInfo(
         );
         if (resourceMetadata.authorization_servers && resourceMetadata.authorization_servers.length > 0) {
             authorizationServerUrl = resourceMetadata.authorization_servers[0];
+            authorizationServerUrlFromResourceMetadata = true;
         }
     } catch (error) {
         // Network failures (DNS, connection refused) surface as TypeError from fetch. Those are
@@ -1465,7 +1483,18 @@ export async function discoverOAuthServerInfo(
         authorizationServerUrl = String(new URL('/', serverUrl));
     }
 
-    const authorizationServerMetadata = await discoverAuthorizationServerMetadata(authorizationServerUrl, { fetchFn: opts?.fetchFn });
+    const authorizationServerMetadata = await discoverAuthorizationServerMetadataInternal(authorizationServerUrl, {
+        fetchFn: opts?.fetchFn,
+        validateIssuer: authorizationServerUrlFromResourceMetadata
+    });
+
+    if (!authorizationServerUrlFromResourceMetadata && authorizationServerMetadata) {
+        const fallbackIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerUrl);
+        const metadataIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerMetadata.issuer);
+        if (metadataIssuer !== fallbackIssuer) {
+            authorizationServerUrl = authorizationServerMetadata.issuer;
+        }
+    }
 
     return {
         authorizationServerUrl,
