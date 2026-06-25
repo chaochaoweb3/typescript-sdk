@@ -39,7 +39,6 @@ import {
     CallToolResultSchema,
     CreateMessageResultSchema,
     CreateMessageResultWithToolsSchema,
-    ElicitRequestFormParamsSchema,
     ElicitResultSchema,
     EmptyResultSchema,
     LATEST_PROTOCOL_VERSION,
@@ -52,10 +51,11 @@ import {
     ProtocolErrorCode,
     SdkError,
     SdkErrorCode,
-    standardSchemaToJsonSchema,
     validateStandardSchema
 } from '@modelcontextprotocol/core-internal';
 import { DefaultJsonSchemaValidator } from '@modelcontextprotocol/server/_shims';
+
+import { normalizeElicitInputFormParams } from './elicitation';
 
 export type ServerOptions = ProtocolOptions & {
     /**
@@ -85,44 +85,6 @@ export type ServerOptions = ProtocolOptions & {
      */
     jsonSchemaValidator?: jsonSchemaValidator;
 };
-
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-const ELICITATION_STRING_FORMATS = new Set(['email', 'uri', 'date', 'date-time']);
-
-function isSupportedFormatPattern(original: Record<string, unknown>, parsed: Record<string, unknown>, key: string): boolean {
-    return (
-        key === 'pattern' &&
-        typeof original.pattern === 'string' &&
-        parsed.type === 'string' &&
-        typeof parsed.format === 'string' &&
-        original.format === parsed.format &&
-        ELICITATION_STRING_FORMATS.has(parsed.format)
-    );
-}
-
-function findStrippedJsonSchemaPaths(original: unknown, parsed: unknown, path = ''): string[] {
-    if (Array.isArray(original) && Array.isArray(parsed)) {
-        return original.flatMap((item, index) => findStrippedJsonSchemaPaths(item, parsed[index], `${path}[${index}]`));
-    }
-
-    if (!isJsonObject(original) || !isJsonObject(parsed)) {
-        return [];
-    }
-
-    return Object.entries(original).flatMap(([key, value]) => {
-        const childPath = path ? `${path}.${key}` : key;
-        if (!Object.prototype.hasOwnProperty.call(parsed, key)) {
-            if (isSupportedFormatPattern(original, parsed, key)) {
-                return [];
-            }
-            return [childPath];
-        }
-        return findStrippedJsonSchemaPaths(value, parsed[key], childPath);
-    });
-}
 
 /**
  * An MCP server on top of a pluggable transport.
@@ -594,7 +556,7 @@ export class Server extends Protocol<ServerContext> {
                     throw new SdkError(SdkErrorCode.CapabilityNotSupported, 'Client does not support form elicitation.');
                 }
 
-                const { params: formParams, standardSchema } = this.normalizeElicitInputFormParams(
+                const { params: formParams, standardSchema } = normalizeElicitInputFormParams(
                     params as ElicitRequestFormParams | ElicitInputFormParams<StandardSchemaWithJSON>
                 );
 
@@ -639,47 +601,6 @@ export class Server extends Protocol<ServerContext> {
                 return result;
             }
         }
-    }
-
-    private normalizeElicitInputFormParams(params: ElicitRequestFormParams | ElicitInputFormParams<StandardSchemaWithJSON>): {
-        params: ElicitRequestFormParams;
-        standardSchema?: StandardSchemaWithJSON;
-    } {
-        const formParams =
-            params.mode === 'form'
-                ? (params as ElicitRequestFormParams)
-                : { ...(params as ElicitRequestFormParams), mode: 'form' as const };
-
-        if (this.isElicitInputSchema(formParams.requestedSchema)) {
-            const standardSchema = formParams.requestedSchema;
-            const normalizedParams = {
-                ...formParams,
-                requestedSchema: standardSchemaToJsonSchema(standardSchema, 'input')
-            };
-            const parsedParams = parseSchema(ElicitRequestFormParamsSchema, normalizedParams);
-            if (!parsedParams.success) {
-                throw new ProtocolError(
-                    ProtocolErrorCode.InvalidParams,
-                    `Elicitation requestedSchema only supports flat primitive properties (string, number, integer, boolean, and string enums): ${parsedParams.error.message}`
-                );
-            }
-            const strippedSchemaPaths = findStrippedJsonSchemaPaths(normalizedParams.requestedSchema, parsedParams.data.requestedSchema);
-            if (strippedSchemaPaths.length > 0) {
-                throw new ProtocolError(
-                    ProtocolErrorCode.InvalidParams,
-                    `Elicitation requestedSchema contains unsupported JSON Schema keyword(s) after Standard Schema conversion: ${strippedSchemaPaths.join(', ')}`
-                );
-            }
-            return { params: parsedParams.data, standardSchema };
-        }
-
-        return { params: formParams };
-    }
-
-    private isElicitInputSchema(
-        schema: ElicitRequestFormParams['requestedSchema'] | StandardSchemaWithJSON
-    ): schema is StandardSchemaWithJSON {
-        return typeof schema === 'object' && schema !== null && '~standard' in schema;
     }
 
     /**
