@@ -157,6 +157,15 @@ a working demo with `better-auth`.
 
 Note: `AuthInfo` has moved from `server/auth/types.ts` to the core types and is now re-exported by `@modelcontextprotocol/client` and `@modelcontextprotocol/server`.
 
+### Authorization server metadata issuer validation
+
+OAuth client discovery now validates authorization-server metadata issuer values per RFC 8414 Section 3.3. When protected resource metadata or cached discovery state identifies an authorization server URL, the discovered metadata's `issuer` must match that URL, except for a
+trailing slash normalization. The public `discoverAuthorizationServerMetadata()` helper also throws when metadata has a mismatched or invalid issuer. If your deployment uses host aliases or proxies that serve metadata for a different issuer, publish the canonical issuer URL in
+protected resource metadata.
+
+For legacy MCP servers without protected resource metadata, the SDK still discovers authorization-server metadata at the MCP server origin. If that origin-hosted metadata names a distinct issuer, the SDK now treats the metadata `issuer` as the authorization server URL saved in
+discovery state and used for fallback endpoint construction.
+
 ### `Headers` object instead of plain objects
 
 Transport APIs and `RequestInfo.headers` now use the Web Standard `Headers` object instead of plain `Record<string, string | string[] | undefined>` (`IsomorphicHeaders` has been removed).

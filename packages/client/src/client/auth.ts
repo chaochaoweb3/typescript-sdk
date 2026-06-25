@@ -596,8 +596,13 @@ export function validateAuthorizationResponseIssuer(
     }
 }
 
-function normalizeDiscoveredIssuerIdentifier(issuer: string | URL): string {
-    const normalized = new URL(issuer).toString();
+function normalizeDiscoveredIssuerIdentifier(issuer: string | URL, label: string): string {
+    let normalized: string;
+    try {
+        normalized = new URL(issuer).toString();
+    } catch {
+        throw new Error(`${label} is not a valid issuer identifier: got ${String(issuer)} (RFC 8414 Section 3.3)`);
+    }
 
     return normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
 }
@@ -607,8 +612,8 @@ function validateAuthorizationServerMetadataIssuer(metadata: { issuer: string } 
         return;
     }
 
-    const expectedIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerUrl);
-    const actualIssuer = normalizeDiscoveredIssuerIdentifier(metadata.issuer);
+    const expectedIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerUrl, 'Authorization server URL');
+    const actualIssuer = normalizeDiscoveredIssuerIdentifier(metadata.issuer, 'Authorization server metadata issuer');
 
     if (actualIssuer !== expectedIssuer) {
         throw new Error(
@@ -1314,8 +1319,13 @@ export function buildDiscoveryUrls(authorizationServerUrl: string | URL): { url:
     return urlsToTry;
 }
 
-interface DiscoverAuthorizationServerMetadataOptions {
+/**
+ * Options for {@linkcode discoverAuthorizationServerMetadata}.
+ */
+export interface DiscoverAuthorizationServerMetadataOptions {
+    /** Optional fetch function for making HTTP requests, defaults to global fetch. */
     fetchFn?: FetchLike;
+    /** MCP protocol version sent during metadata discovery. */
     protocolVersion?: string;
 }
 
@@ -1489,8 +1499,11 @@ export async function discoverOAuthServerInfo(
     });
 
     if (!authorizationServerUrlFromResourceMetadata && authorizationServerMetadata) {
-        const fallbackIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerUrl);
-        const metadataIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerMetadata.issuer);
+        const fallbackIssuer = normalizeDiscoveredIssuerIdentifier(authorizationServerUrl, 'Authorization server URL');
+        const metadataIssuer = normalizeDiscoveredIssuerIdentifier(
+            authorizationServerMetadata.issuer,
+            'Authorization server metadata issuer'
+        );
         if (metadataIssuer !== fallbackIssuer) {
             authorizationServerUrl = authorizationServerMetadata.issuer;
         }

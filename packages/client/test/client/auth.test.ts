@@ -966,6 +966,21 @@ describe('OAuth Authorization', () => {
             );
         });
 
+        it('rejects OAuth metadata whose issuer is not a valid URL with a descriptive error', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    ...validOAuthMetadata,
+                    issuer: 'auth.example.com'
+                })
+            });
+
+            await expect(discoverAuthorizationServerMetadata('https://auth.example.com')).rejects.toThrow(
+                /Authorization server metadata issuer is not a valid issuer identifier: got auth\.example\.com/
+            );
+        });
+
         it('rejects OpenID metadata whose issuer does not match the authorization server URL', async () => {
             mockFetch.mockResolvedValueOnce({
                 ok: false,
