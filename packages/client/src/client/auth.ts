@@ -700,7 +700,10 @@ async function authInternal(
                 (fallbackMatchesDiscoveredAuthorizationServer ? serverInfo.authorizationServerMetadata : undefined) ??
                 (await discoverAuthorizationServerMetadata(fallbackAuthorizationServerUrl, { fetchFn }));
 
-            if (cachedState?.authorizationServerUrl && metadata !== cachedState.authorizationServerMetadata) {
+            if (
+                cachedState?.authorizationServerUrl &&
+                (metadata !== cachedState.authorizationServerMetadata || resourceMetadata !== cachedState.resourceMetadata)
+            ) {
                 discoveryStateToSave = {
                     authorizationServerUrl: String(authorizationServerUrl),
                     authorizationServerSource,
