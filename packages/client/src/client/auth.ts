@@ -622,6 +622,25 @@ function validateAuthorizationServerMetadataIssuer(metadata: { issuer: string } 
     }
 }
 
+function isStaleLegacyFallbackDiscoveryState(
+    cachedState: OAuthDiscoveryState,
+    metadata: { issuer: string } | undefined,
+    serverUrl: string | URL
+): boolean {
+    if (!metadata || cachedState.resourceMetadata?.authorization_servers?.length) {
+        return false;
+    }
+
+    try {
+        const cachedIssuer = normalizeDiscoveredIssuerIdentifier(cachedState.authorizationServerUrl, 'Cached authorization server URL');
+        const legacyFallbackIssuer = normalizeDiscoveredIssuerIdentifier(new URL('/', serverUrl), 'MCP server URL');
+        const metadataIssuer = normalizeDiscoveredIssuerIdentifier(metadata.issuer, 'Authorization server metadata issuer');
+        return cachedIssuer === legacyFallbackIssuer && metadataIssuer !== cachedIssuer;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Orchestrates the full auth flow with a server.
  *
@@ -725,7 +744,7 @@ async function authInternal(
     const cachedState = await provider.discoveryState?.();
 
     let resourceMetadata: OAuthProtectedResourceMetadata | undefined;
-    let authorizationServerUrl: string | URL;
+    let authorizationServerUrl: string | URL | undefined;
     let metadata: AuthorizationServerMetadata | undefined;
 
     // If resourceMetadataUrl is not provided, try to load it from cached state
@@ -735,14 +754,28 @@ async function authInternal(
         effectiveResourceMetadataUrl = new URL(cachedState.resourceMetadataUrl);
     }
 
+    let useCachedDiscoveryState = false;
     if (cachedState?.authorizationServerUrl) {
+        useCachedDiscoveryState = true;
         // Restore discovery state from cache
         authorizationServerUrl = cachedState.authorizationServerUrl;
         resourceMetadata = cachedState.resourceMetadata;
         metadata =
-            cachedState.authorizationServerMetadata ?? (await discoverAuthorizationServerMetadata(authorizationServerUrl, { fetchFn }));
-        validateAuthorizationServerMetadataIssuer(metadata, authorizationServerUrl);
+            cachedState.authorizationServerMetadata ??
+            (await discoverAuthorizationServerMetadataInternal(authorizationServerUrl, { fetchFn, validateIssuer: false }));
+        try {
+            validateAuthorizationServerMetadataIssuer(metadata, authorizationServerUrl);
+        } catch (error) {
+            if (!isStaleLegacyFallbackDiscoveryState(cachedState, metadata, serverUrl)) {
+                throw error;
+            }
 
+            await provider.invalidateCredentials?.('discovery');
+            useCachedDiscoveryState = false;
+        }
+    }
+
+    if (useCachedDiscoveryState && cachedState?.authorizationServerUrl) {
         // If resource metadata wasn't cached, try to fetch it for selectResourceURL
         if (!resourceMetadata) {
             try {
@@ -770,7 +803,9 @@ async function authInternal(
                 authorizationServerMetadata: metadata
             });
         }
-    } else {
+    }
+
+    if (!useCachedDiscoveryState) {
         // Full discovery via RFC 9728
         const serverInfo = await discoverOAuthServerInfo(serverUrl, { resourceMetadataUrl: effectiveResourceMetadataUrl, fetchFn });
         authorizationServerUrl = serverInfo.authorizationServerUrl;
@@ -788,6 +823,10 @@ async function authInternal(
             resourceMetadata,
             authorizationServerMetadata: metadata
         });
+    }
+
+    if (authorizationServerUrl === undefined) {
+        throw new Error('OAuth authorization server URL was not discovered');
     }
 
     // Save authorization server URL for providers that need it (e.g., CrossAppAccessProvider)
