@@ -85,7 +85,9 @@ server:
     - http-custom-header-server-validation
     # WARNING-only entries: these scenarios emit no FAILURE checks, only SHOULD-level
     # WARNINGs, but the expected-failures evaluator counts WARNINGs as failures.
-    # SEP-2164: server returns -32002 without the requested URI in error.data.
+    # SEP-2164: the draft conformance runner exercises resources/read through the
+    # 2026-07-28 stateless HTTP path; this fixture is still stateful-only, so the
+    # request does not reach McpServer's resource-not-found handler yet.
     - sep-2164-resource-not-found
     # SEP-2322 SHOULD-level behaviours (re-request missing inputResponses, ignore
     # unrecognized inputResponses keys).

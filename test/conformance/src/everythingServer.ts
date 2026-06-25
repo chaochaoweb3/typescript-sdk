@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { localhostHostValidation } from '@modelcontextprotocol/express';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import type { CallToolResult, EventId, EventStore, GetPromptResult, ReadResourceResult, StreamId } from '@modelcontextprotocol/server';
-import { isInitializeRequest, McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
+import { isInitializeRequest, McpServer, ResourceTemplate, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server';
 import cors from 'cors';
 import type { Request, Response } from 'express';
 import express from 'express';
@@ -63,6 +63,7 @@ const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQ
 
 // Sample base64 encoded minimal WAV file for testing
 const TEST_AUDIO_BASE64 = 'UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQIAAAA=';
+const DRAFT_PROTOCOL_VERSION = '2026-07-28';
 
 // Function to create a new MCP server instance (one per session)
 function createMcpServer() {
@@ -72,6 +73,7 @@ function createMcpServer() {
             version: '1.0.0'
         },
         {
+            supportedProtocolVersions: [...new Set([DRAFT_PROTOCOL_VERSION, ...SUPPORTED_PROTOCOL_VERSIONS])],
             capabilities: {
                 tools: {
                     listChanged: true

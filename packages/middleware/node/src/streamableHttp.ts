@@ -159,6 +159,14 @@ export class NodeStreamableHTTPServerTransport implements Transport {
     }
 
     /**
+     * Sets the supported protocol versions for header validation.
+     * Called by the server during connect() to pass its supported versions.
+     */
+    setSupportedProtocolVersions(versions: string[]): void {
+        this._webStandardTransport.setSupportedProtocolVersions(versions);
+    }
+
+    /**
      * Handles an incoming HTTP request, whether `GET` or `POST`.
      *
      * This method converts Node.js HTTP objects to Web Standard Request/Response
