@@ -17,6 +17,7 @@ import type {
     Resource,
     ResourceTemplateReference,
     Result,
+    SdkLogger,
     ServerContext,
     StandardSchemaWithJSON,
     Tool,
@@ -68,8 +69,10 @@ export class McpServer {
     } = {};
     private _registeredTools: { [name: string]: RegisteredTool } = {};
     private _registeredPrompts: { [name: string]: RegisteredPrompt } = {};
+    private readonly _logger: SdkLogger;
 
     constructor(serverInfo: Implementation, options?: ServerOptions) {
+        this._logger = options?.logger ?? console;
         this.server = new Server(serverInfo, options);
 
         // Per the MCP spec, a server that declares a primitive capability MUST respond to its
@@ -141,7 +144,7 @@ export class McpServer {
                             title: tool.title,
                             description: tool.description,
                             inputSchema: tool.inputSchema
-                                ? (standardSchemaToJsonSchema(tool.inputSchema, 'input') as Tool['inputSchema'])
+                                ? (standardSchemaToJsonSchema(tool.inputSchema, 'input', this._logger) as Tool['inputSchema'])
                                 : EMPTY_OBJECT_JSON_SCHEMA,
                             annotations: tool.annotations,
                             icons: tool.icons,
@@ -150,7 +153,11 @@ export class McpServer {
                         };
 
                         if (tool.outputSchema) {
-                            toolDefinition.outputSchema = standardSchemaToJsonSchema(tool.outputSchema, 'output') as Tool['outputSchema'];
+                            toolDefinition.outputSchema = standardSchemaToJsonSchema(
+                                tool.outputSchema,
+                                'output',
+                                this._logger
+                            ) as Tool['outputSchema'];
                         }
 
                         return toolDefinition;
@@ -709,7 +716,7 @@ export class McpServer {
         handler: AnyToolHandler<StandardSchemaWithJSON | undefined>
     ): RegisteredTool {
         // Validate tool name according to SEP specification
-        validateAndWarnToolName(name);
+        validateAndWarnToolName(name, this._logger);
 
         // Track current handler for executor regeneration
         let currentHandler = handler;
@@ -732,7 +739,7 @@ export class McpServer {
             update: updates => {
                 if (updates.name !== undefined && updates.name !== name) {
                     if (typeof updates.name === 'string') {
-                        validateAndWarnToolName(updates.name);
+                        validateAndWarnToolName(updates.name, this._logger);
                     }
                     delete this._registeredTools[name];
                     if (updates.name) this._registeredTools[updates.name] = registeredTool;

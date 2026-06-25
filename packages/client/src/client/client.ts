@@ -692,7 +692,7 @@ export class Client extends Protocol<ClientContext> {
     async listPrompts(params?: ListPromptsRequest['params'], options?: RequestOptions) {
         if (!this._serverCapabilities?.prompts && !this._enforceStrictCapabilities) {
             // Respect capability negotiation: server does not support prompts
-            console.debug('Client.listPrompts() called but server does not advertise prompts capability - returning empty list');
+            this._logger.debug?.('Client.listPrompts() called but server does not advertise prompts capability - returning empty list');
             return { prompts: [] };
         }
         return this._requestWithSchema({ method: 'prompts/list', params }, ListPromptsResultSchema, options);
@@ -723,7 +723,7 @@ export class Client extends Protocol<ClientContext> {
     async listResources(params?: ListResourcesRequest['params'], options?: RequestOptions) {
         if (!this._serverCapabilities?.resources && !this._enforceStrictCapabilities) {
             // Respect capability negotiation: server does not support resources
-            console.debug('Client.listResources() called but server does not advertise resources capability - returning empty list');
+            this._logger.debug?.('Client.listResources() called but server does not advertise resources capability - returning empty list');
             return { resources: [] };
         }
         return this._requestWithSchema({ method: 'resources/list', params }, ListResourcesResultSchema, options);
@@ -738,7 +738,7 @@ export class Client extends Protocol<ClientContext> {
     async listResourceTemplates(params?: ListResourceTemplatesRequest['params'], options?: RequestOptions) {
         if (!this._serverCapabilities?.resources && !this._enforceStrictCapabilities) {
             // Respect capability negotiation: server does not support resources
-            console.debug(
+            this._logger.debug?.(
                 'Client.listResourceTemplates() called but server does not advertise resources capability - returning empty list'
             );
             return { resourceTemplates: [] };
@@ -887,7 +887,7 @@ export class Client extends Protocol<ClientContext> {
     async listTools(params?: ListToolsRequest['params'], options?: RequestOptions) {
         if (!this._serverCapabilities?.tools && !this._enforceStrictCapabilities) {
             // Respect capability negotiation: server does not support tools
-            console.debug('Client.listTools() called but server does not advertise tools capability - returning empty list');
+            this._logger.debug?.('Client.listTools() called but server does not advertise tools capability - returning empty list');
             return { tools: [] };
         }
         const result = await this._requestWithSchema({ method: 'tools/list', params }, ListToolsResultSchema, options);

@@ -44,6 +44,7 @@ import {
 } from '../types/index';
 import type { StandardSchemaV1 } from '../util/standardSchema';
 import { isStandardSchema, validateStandardSchema } from '../util/standardSchema';
+import type { SdkLogger } from './logger';
 import type { Transport, TransportSendOptions } from './transport';
 
 /**
@@ -78,6 +79,13 @@ export type ProtocolOptions = {
      * e.g., `['notifications/tools/list_changed']`
      */
     debouncedNotificationMethods?: string[];
+
+    /**
+     * Logger used by SDK internals for diagnostics.
+     *
+     * @default console
+     */
+    logger?: SdkLogger;
 };
 
 /**
@@ -292,6 +300,7 @@ export abstract class Protocol<ContextT extends BaseContext> {
     private _pendingDebouncedNotifications = new Set<string>();
 
     protected _supportedProtocolVersions: string[];
+    protected _logger: SdkLogger;
 
     /**
      * Callback for when the connection is closed for any reason.
@@ -319,6 +328,7 @@ export abstract class Protocol<ContextT extends BaseContext> {
 
     constructor(private _options?: ProtocolOptions) {
         this._supportedProtocolVersions = _options?.supportedProtocolVersions ?? SUPPORTED_PROTOCOL_VERSIONS;
+        this._logger = _options?.logger ?? console;
 
         this.setNotificationHandler('notifications/cancelled', notification => {
             this._oncancel(notification);
